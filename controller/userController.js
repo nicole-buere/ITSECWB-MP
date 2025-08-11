@@ -26,6 +26,18 @@ exports.registerUser = async (req, res) => {
             return;
         }
 
+        // Check if password meets minimum length (8)
+        if (password.length !== 8) {
+            res.status(400).json({ message: "Password must be at least 8 characters!" });
+            return;
+        }
+
+        // Check if 'Password' and 'Confirm Password' fields match
+        if (password !== confirmPassword) {
+            res.status(400).json({ message: "Passwords do not match!" });
+            return;
+        }
+
         // Hash the password before storing it in the database
         const saltRounds = 10;
         const hash = await bcrypt.hash(password, saltRounds);
