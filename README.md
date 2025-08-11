@@ -23,7 +23,6 @@ fix/loginFailBug
 fix/formValidationError
 
 # 🚀 Getting Started
-
 1. **Check if Node.js is installed**  
    - Open **Command Prompt** (Windows) or **Terminal** (Mac/Linux).  
    - Type:  
@@ -54,8 +53,3 @@ fix/formValidationError
      ```
      http://localhost:3000
      ```
-
-Type:
-- before running make sure to install all relevant libraries, use ```npm install``` or ```npm i```
-- to run the application, use the command ```npm run start``` in your terminal
-- you can access the server at http://localhost:3000
