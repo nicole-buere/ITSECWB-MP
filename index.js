@@ -54,6 +54,11 @@ hbs.registerHelper('getReservationDate', function(reservations, desiredDate, cur
     return false;
 });
 
+// Register eq helper for comparing values in templates
+hbs.registerHelper('eq', function(a, b) {
+    return a === b;
+});
+
 // Handle GET request to the root route (index page)
 app.get('/', (req, res) => {
   if (req.session.authenticated) {
@@ -94,7 +99,14 @@ app.get('/profile', async (req, res) => {
 
         if (userError) {
             console.error("Error fetching user:", userError);
-            return res.status(500).render('error', { message: 'Internal server error' });
+            return res.status(500).render('error_page', {
+                title: 'Internal Server Error',
+                errorCode: '500',
+                errorTitle: 'Internal Server Error',
+                errorMessage: 'Something went wrong while fetching user data.',
+                errorDescription: 'We encountered an issue while retrieving your profile information. Please try again later.',
+                showLogin: false
+            });
         }
 
         if (user) {
@@ -134,11 +146,25 @@ app.get('/profile', async (req, res) => {
             
         } else {
             // Handle case where user is not found (optional)
-            res.status(404).render('error', { message: 'User not found' });
+            res.status(404).render('error_page', {
+                title: 'User Not Found',
+                errorCode: '404',
+                errorTitle: 'User Not Found',
+                errorMessage: 'The user profile you\'re looking for doesn\'t exist.',
+                errorDescription: 'The user may have been deleted or the username may be incorrect.',
+                showLogin: false
+            });
         }
     } catch (err) {
         console.error(err);
-        res.status(500).render('error', { message: 'Internal server error' });
+        res.status(500).render('error_page', {
+            title: 'Internal Server Error',
+            errorCode: '500',
+            errorTitle: 'Internal Server Error',
+            errorMessage: 'Something went wrong while processing your request.',
+            errorDescription: 'We encountered an issue while retrieving your profile. Please try again later.',
+            showLogin: false
+        });
     }
 }); 
 
@@ -164,11 +190,25 @@ app.get('/edittprofile', async (req, res) => {
             });
         } else {
             // Handle case where user is not found (optional)
-            res.status(404).render('error', { message: 'User not found' });
+            res.status(404).render('error_page', {
+                title: 'User Not Found',
+                errorCode: '404',
+                errorTitle: 'User Not Found',
+                errorMessage: 'The user profile you\'re looking for doesn\'t exist.',
+                errorDescription: 'The user may have been deleted or the username may be incorrect.',
+                showLogin: false
+            });
         }
     } catch (err) {
         console.error(err);
-        res.status(500).render('error', { message: 'Internal server error' });
+        res.status(500).render('error_page', {
+            title: 'Internal Server Error',
+            errorCode: '500',
+            errorTitle: 'Internal Server Error',
+            errorMessage: 'Something went wrong while processing your request.',
+            errorDescription: 'We encountered an issue while retrieving your profile. Please try again later.',
+            showLogin: false
+        });
     }
 });
 app.get('/reserve', async (req, res) => {
@@ -390,6 +430,81 @@ app.get('/editReservation/:labId/:seatNumber/:date/:start_time/:end_time/:reserv
 
 app.get('/about', (req, res) => {
         res.render('about', { title: 'Labyrinth - About Us'});
+});
+
+// Error handling routes
+app.get('/error/:code', (req, res) => {
+    const errorCode = req.params.code;
+    let errorData = {
+        title: 'Error',
+        errorCode: errorCode,
+        errorTitle: 'Something went wrong',
+        errorMessage: 'An unexpected error occurred.',
+        errorDescription: 'We encountered an issue while processing your request.',
+        showLogin: false
+    };
+
+    switch(errorCode) {
+        case '404':
+            errorData.errorTitle = 'Page Not Found';
+            errorData.errorMessage = 'The page you\'re looking for doesn\'t exist.';
+            errorData.errorDescription = 'The URL you entered may be incorrect or the page may have been moved or deleted.';
+            break;
+        case '403':
+            errorData.errorTitle = 'Access Forbidden';
+            errorData.errorMessage = 'You don\'t have permission to access this resource.';
+            errorData.errorDescription = 'This page requires special permissions or you may need to log in with a different account.';
+            errorData.showLogin = true;
+            break;
+        case '500':
+            errorData.errorTitle = 'Internal Server Error';
+            errorData.errorMessage = 'Something went wrong on our end.';
+            errorData.errorDescription = 'We\'re experiencing technical difficulties. Please try again later or contact support if the problem persists.';
+            break;
+        case '401':
+            errorData.errorTitle = 'Unauthorized Access';
+            errorData.errorMessage = 'You need to log in to access this page.';
+            errorData.errorDescription = 'This page requires authentication. Please log in with your account credentials.';
+            errorData.showLogin = true;
+            break;
+        case '502':
+            errorData.errorTitle = 'Bad Gateway';
+            errorData.errorMessage = 'We\'re having trouble connecting to our services.';
+            errorData.errorDescription = 'Our servers are experiencing connectivity issues. Please try again in a few minutes.';
+            break;
+        case '503':
+            errorData.errorTitle = 'Service Unavailable';
+            errorData.errorMessage = 'Our service is temporarily unavailable.';
+            errorData.errorDescription = 'We\'re currently performing maintenance or experiencing high traffic. Please check back later.';
+            break;
+    }
+
+    res.status(parseInt(errorCode)).render('error_page', errorData);
+});
+
+// 404 handler for unmatched routes
+app.use('*', (req, res) => {
+    res.status(404).render('error_page', {
+        title: 'Page Not Found',
+        errorCode: '404',
+        errorTitle: 'Page Not Found',
+        errorMessage: 'The page you\'re looking for doesn\'t exist.',
+        errorDescription: 'The URL you entered may be incorrect or the page may have been moved or deleted.',
+        showLogin: false
+    });
+});
+
+// Global error handler
+app.use((err, req, res, next) => {
+    console.error('Global error handler:', err);
+    res.status(500).render('error_page', {
+        title: 'Internal Server Error',
+        errorCode: '500',
+        errorTitle: 'Internal Server Error',
+        errorMessage: 'Something went wrong on our end.',
+        errorDescription: 'We\'re experiencing technical difficulties. Please try again later or contact support if the problem persists.',
+        showLogin: false
+    });
 });
 
 // Start the server
