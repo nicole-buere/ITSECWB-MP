@@ -6,6 +6,7 @@ exports.registerUser = async (req, res) => {
     try {
         const { name, email, username, password, confirmPassword, role } = req.body;
 
+        // Debugging
         console.log("password ", password);
         console.log("confirmPassword", confirmPassword);
 
@@ -78,6 +79,10 @@ exports.loginUser = async (req, res) => {
         if (!user) {
             return res.status(401).json({ message: "User not found!" });
         }
+
+        // Debugging 
+        console.log ("Inputted Password: ", password)
+        console.log ("Stored Password: ", user.password)
 
         const isPasswordValid = await bcrypt.compare(password, user.password);
 
