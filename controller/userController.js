@@ -32,14 +32,15 @@ exports.registerUser = async (req, res) => {
 
         // Create a new user
         const newUser = {
-            name,
             email,
             username,
             password: hash,
             role,
+            status: 'active',
+            first_name: name.split(' ')[0] || name,
+            last_name: name.split(' ').slice(1).join(' ') || '',
             description: '',
-            profilePicture: 'https://www.redditstatic.com/avatars/avatar_default_02_4856A3.png',
-            reservations: [],
+            profile_picture: 'https://www.redditstatic.com/avatars/avatar_default_02_4856A3.png',
         };
 
         // Save the new user to the database
@@ -148,7 +149,7 @@ exports.editPFP = async (req, res) => {
     try {
         const { error } = await supabase
             .from('users')
-            .update({ pictureURL: req.body.pictureURL })
+            .update({ profile_picture: req.body.pictureURL })
             .eq('username', req.session.username);
 
         if (error) {
