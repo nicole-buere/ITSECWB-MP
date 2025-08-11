@@ -1,20 +1,25 @@
-const User = require('../model/user');
-const {client, DB_NAME } = require('../model/database');
+const { supabase } = require('../model/database');
 const bcrypt = require("bcrypt");
 
 
 exports.registerUser = async (req, res) => {
-
-    const db = client.db(DB_NAME);
-    const users = db.collection('users');
     try {
         const { name, email, username, password, confirmPassword, role } = req.body;
 
         console.log("password ", password);
         console.log("confirmPassword", confirmPassword);
 
-        // Check if the username already exists using Mongoose
-        const existingUser = await users.findOne({ username });
+        // Check if the username already exists
+        const { data: existingUser, error: findError } = await supabase
+            .from('users')
+            .select('username')
+            .eq('username', username)
+            .single();
+
+        if (findError && findError.code !== 'PGRST116') { // PGRST116 is "not found" error
+            console.error("Error checking existing user:", findError);
+            return res.status(500).json({ message: "Database error" });
+        }
 
         if (existingUser) {
             res.status(400).json({ message: "Username is already taken!" });
@@ -23,24 +28,33 @@ exports.registerUser = async (req, res) => {
 
         // Hash the password before storing it in the database
         const saltRounds = 10;
-        const hash = await bcrypt.hash(password, saltRounds); //hashs user pw with 10rounds
+        const hash = await bcrypt.hash(password, saltRounds);
 
-        // Create a new user document using the Mongoose model
-        const newUser = new User({
+        // Create a new user
+        const newUser = {
             name,
             email,
             username,
             password: hash,
             role,
-            description : '',
+            description: '',
             profilePicture: 'https://www.redditstatic.com/avatars/avatar_default_02_4856A3.png',
-            reservations : [],
-        });
+            reservations: [],
+        };
 
         // Save the new user to the database
-        await users.insertOne(newUser);
+        const { error: insertError } = await supabase
+            .from('users')
+            .insert([newUser]);
+
+        if (insertError) {
+            console.error("Error inserting user:", insertError);
+            return res.status(500).json({ message: "Error creating user" });
+        }
+
         res.status(201).json({ message: "User created" });
     } catch (e) {
+        console.error("Error in registerUser:", e);
         res.status(500).json({ message: e.message });
     }
 };
@@ -49,17 +63,23 @@ exports.loginUser = async (req, res) => {
     try {
         const { username, password } = req.body;
 
-        // Reuse the MongoDB client and database connection
-        const db = client.db(DB_NAME);
-        const users = db.collection('users');
-        const user = await users.findOne({ username });
+        // Find user in Supabase
+        const { data: user, error: findError } = await supabase
+            .from('users')
+            .select('*')
+            .eq('username', username)
+            .single();
+
+        if (findError) {
+            console.error("Error finding user:", findError);
+            return res.status(401).json({ message: "User not found!" });
+        }
 
         if (!user) {
             return res.status(401).json({ message: "User not found!" });
         }
 
         const isPasswordValid = await bcrypt.compare(password, user.password);
-
 
         if (isPasswordValid) {
             // Create or update the session
@@ -84,11 +104,20 @@ exports.loginUser = async (req, res) => {
 
 exports.getUser = async (req, res) => {
     try {
-        const db = client.db(DB_NAME);
-        const users = db.collection('users');
-        const user = await users.findOne({ username: req.session.username });
+        const { data: user, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('username', req.session.username)
+            .single();
+
+        if (error) {
+            console.error("Error fetching user:", error);
+            return res.status(500).json({ message: "Error fetching user" });
+        }
+
         res.status(200).json(user);
     } catch (e) {
+        console.error("Error in getUser:", e);
         res.status(500).json({ message: e.message });
     }
 };
@@ -98,39 +127,53 @@ exports.getUser = async (req, res) => {
 
 exports.editDescription = async (req, res) => {
     try {
-        const db = client.db(DB_NAME);
-        const users = db.collection('users');
-        const user = await users.findOne({ username: req.session.username });
+        const { error } = await supabase
+            .from('users')
+            .update({ description: req.body.description })
+            .eq('username', req.session.username);
 
-        await users.updateOne({ username: req.session.username }, { $set: { description: req.body.description } });
+        if (error) {
+            console.error("Error updating description:", error);
+            return res.status(500).json({ message: "Error updating description" });
+        }
 
         res.status(200).json({ message: "Description updated" });
     } catch (e) {
+        console.error("Error in editDescription:", e);
         res.status(500).json({ message: e.message });
     }
 }
 
 exports.editPFP = async (req, res) => {
     try {
-        const db = client.db(DB_NAME);
-        const users = db.collection('users');
-        const user = await users.findOne({ username: req.session.username });
+        const { error } = await supabase
+            .from('users')
+            .update({ pictureURL: req.body.pictureURL })
+            .eq('username', req.session.username);
 
-        await users.updateOne({ username: req.session.username }, { $set: { pictureURL: req.body.pictureURL } });
+        if (error) {
+            console.error("Error updating profile picture:", error);
+            return res.status(500).json({ message: "Error updating profile picture" });
+        }
 
         res.status(200).json({ message: "Profile Picture updated" });
     } catch (e) {
+        console.error("Error in editPFP:", e);
         res.status(500).json({ message: e.message });
     }
 }     
 
 exports.deleteUser = async (req, res) => {
     try {
-        const db = client.db(DB_NAME);
-        const users = db.collection('users');
+        const { error } = await supabase
+            .from('users')
+            .delete()
+            .eq('username', req.session.username);
         
-        // Delete the user from the database
-        await users.deleteOne({ username: req.session.username });
+        if (error) {
+            console.error("Error deleting user:", error);
+            return res.status(500).json({ message: "Error deleting user" });
+        }
         
         // End the session
         req.session.destroy((err) => {
@@ -142,6 +185,7 @@ exports.deleteUser = async (req, res) => {
             }
         });
     } catch (e) {
+        console.error("Error in deleteUser:", e);
         res.status(500).json({ message: e.message });
     }
 }

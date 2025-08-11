@@ -1,73 +1,61 @@
-const Lab = require('../model/lab');
-const {client, DB_NAME } = require('../model/database');
-const Reservation = require('../model/reservation');
+const { supabase } = require('../model/database');
 const userController = require('./userController');
 
 
 exports.reserveASeat = async (req, res) => {
-    const db = client.db(DB_NAME);
-    const labs = db.collection('labs');
     try {
         const { seatNumber, date, start_time, end_time } = req.body;
         const labName = req.params.labId;
         const username = req.session.username;
 
         // Find the lab document by its name
-        const lab = await labs.findOne({ name: labName });
+        const { data: lab, error: labError } = await supabase
+            .from('labs')
+            .select('*')
+            .eq('name', labName)
+            .single();
 
-        if (!lab) {
+        if (labError || !lab) {
             return res.status(404).json({ message: "Lab not found", labName });
         }
 
-        // Find the seat within the lab's seats array based on the provided seatNumber
-        const seat = lab.seats.find(seat => seat.seatNumber === seatNumber);
+        // Check if the seat is available for reservation
+        const { data: overlappingReservations, error: checkError } = await supabase
+            .from('reservation')
+            .select('*')
+            .eq('lab_id', labName)
+            .eq('seatNumber', seatNumber)
+            .eq('date', date)
+            .or(`start_time.lte.${start_time},end_time.gte.${start_time},start_time.lte.${end_time},end_time.gte.${end_time}`);
 
-        if (!seat) {
-            return res.status(404).json({ message: "Seat not found" });
+        if (checkError) {
+            console.error("Error checking overlapping reservations:", checkError);
+            return res.status(500).json({ message: "Error checking seat availability" });
         }
 
-        // Check if the seat is available for reservation
-        const overlappingReservation = seat.reservations.find(reservation =>
-            reservation.date === date &&
-            ((start_time >= reservation.start_time && start_time < reservation.end_time) ||
-             (end_time > reservation.start_time && end_time <= reservation.end_time))
-        );
-
-        if (overlappingReservation) {
+        if (overlappingReservations && overlappingReservations.length > 0) {
             return res.status(409).json({ message: "Seat is already reserved for the specified time slot" });
         }
 
-        // Create a new reservation object
+        // Create a new reservation
         const newReservation = {
             date,
             start_time,
             end_time,
-            lab_id: lab._id, // Use lab's _id for lab_id field
+            lab_id: labName,
             reserved_by: username,
-            seatNumber
+            seatNumber: parseInt(seatNumber)
         };
 
-        // Add the new reservation to the reservations array of the seat
-        seat.reservations.push(newReservation);
+        // Insert the reservation
+        const { error: insertError } = await supabase
+            .from('reservation')
+            .insert([newReservation]);
 
-        // Update the lab document
-        await labs.updateOne({ _id: lab._id }, { $set: { seats: lab.seats } });
-
-
-        // ReservationController
-        const reservation = db.collection('reservation');
-        const newReservationUser = {
-            date,
-            start_time,
-            end_time,
-            lab_id: labName, // Use lab's _id for lab_id field
-            reserved_by: username,
-            seatNumber
-        };
-
-
-        await reservation.insertOne(newReservationUser);
-
+        if (insertError) {
+            console.error("Error inserting reservation:", insertError);
+            return res.status(500).json({ message: "Error creating reservation" });
+        }
 
         return res.status(201).json({ message: "Reservation successful" });
     } catch (e) {
@@ -77,8 +65,6 @@ exports.reserveASeat = async (req, res) => {
 };
 
 exports.adminReserve = async (req, res) => {
-    const db = client.db(DB_NAME);
-    const labs = db.collection('labs');
     try {
         const { seatNumber, date, start_time, end_time, username } = req.body;
         const labName = req.params.labId;
@@ -86,61 +72,53 @@ exports.adminReserve = async (req, res) => {
         console.log(req.body)
 
         // Find the lab document by its name
-        const lab = await labs.findOne({ name: labName });
+        const { data: lab, error: labError } = await supabase
+            .from('labs')
+            .select('*')
+            .eq('name', labName)
+            .single();
 
-        if (!lab) {
+        if (labError || !lab) {
             return res.status(404).json({ message: "Lab not found", labName });
         }
 
-        // Find the seat within the lab's seats array based on the provided seatNumber
-        const seat = lab.seats.find(seat => seat.seatNumber === seatNumber);
+        // Check if the seat is available for reservation
+        const { data: overlappingReservations, error: checkError } = await supabase
+            .from('reservation')
+            .select('*')
+            .eq('lab_id', labName)
+            .eq('seatNumber', seatNumber)
+            .eq('date', date)
+            .or(`start_time.lte.${start_time},end_time.gte.${start_time},start_time.lte.${end_time},end_time.gte.${end_time}`);
 
-        if (!seat) {
-            return res.status(404).json({ message: "Seat not found" });
+        if (checkError) {
+            console.error("Error checking overlapping reservations:", checkError);
+            return res.status(500).json({ message: "Error checking seat availability" });
         }
 
-        // Check if the seat is available for reservation
-        const overlappingReservation = seat.reservations.find(reservation =>
-            reservation.date === date &&
-            ((start_time >= reservation.start_time && start_time < reservation.end_time) ||
-             (end_time > reservation.start_time && end_time <= reservation.end_time))
-        );
-
-        if (overlappingReservation) {
+        if (overlappingReservations && overlappingReservations.length > 0) {
             return res.status(409).json({ message: "Seat is already reserved for the specified time slot" });
         }
 
-        // Create a new reservation object
+        // Create a new reservation
         const newReservation = {
             date,
             start_time,
             end_time,
-            lab_id: lab._id, // Use lab's _id for lab_id field
+            lab_id: labName,
             reserved_by: req.body.user_name,
-            seatNumber
+            seatNumber: parseInt(seatNumber)
         };
 
-        // Add the new reservation to the reservations array of the seat
-        seat.reservations.push(newReservation);
+        // Insert the reservation
+        const { error: insertError } = await supabase
+            .from('reservation')
+            .insert([newReservation]);
 
-        // Update the lab document
-        await labs.updateOne({ _id: lab._id }, { $set: { seats: lab.seats } });
-
-
-        // ReservationController
-        const reservation = db.collection('reservation');
-        const newReservationUser = {
-            date,
-            start_time,
-            end_time,
-            lab_id: labName, // Use lab's _id for lab_id field
-            reserved_by: req.body.user_name,
-            seatNumber
-        };
-
-
-        await reservation.insertOne(newReservationUser);
-
+        if (insertError) {
+            console.error("Error inserting reservation:", insertError);
+            return res.status(500).json({ message: "Error creating reservation" });
+        }
 
         return res.status(201).json({ message: "Reservation successful" });
     } catch (e) {
@@ -153,10 +131,6 @@ exports.adminReserve = async (req, res) => {
 // Define the route for deleting reservations
 exports.deleteReservation = async (req, res) => {
     try {
-        const db = client.db(DB_NAME);
-        const reservation = db.collection('reservation');
-        const lab = db.collection('labs');
-        
         // Extract parameters from the request body
         const { lab_id, seatNumber, date, start_time, end_time, username } = req.body;
 
@@ -175,13 +149,14 @@ exports.deleteReservation = async (req, res) => {
         console.log("Query:", query);
 
         // Delete the reservation from the database
-        const result = await reservation.deleteOne(query);
+        const { error: deleteError } = await supabase
+            .from('reservation')
+            .delete()
+            .match(query);
 
-        console.log("Delete Result:", result);
-
-        if (result.deletedCount === 0) {
-            console.log("Reservation not found or you are not authorized to delete it");
-            return res.status(404).json({ message: "Reservation not found or you are not authorized to delete it" });
+        if (deleteError) {
+            console.error("Error deleting reservation:", deleteError);
+            return res.status(500).json({ message: "Error deleting reservation" });
         }
 
         console.log("Reservation deleted successfully");
@@ -256,15 +231,10 @@ exports.updateReservationProfile = async (req, res) => {
 
         
 
-        // Add your logic here to update the reservation
-        const db = client.db(DB_NAME);
-        const reservationCollection = db.collection('reservation');
-        const labCollection = db.collection('labs');
-
         // Construct the query based on the provided parameters
         const reservationQuery = {
             "lab_id": labId,
-            "seatNumber": seatNumber,
+            "seatNumber": parseInt(seatNumber),
             "date": date,
             "start_time": start_time,
             "end_time": end_time,
@@ -273,52 +243,20 @@ exports.updateReservationProfile = async (req, res) => {
 
         console.log("Query:", reservationQuery);
 
-        // Retrieve the existing reservation
-        const existingReservation = await reservationCollection.findOne(reservationQuery);
-
-        // Check if the reservation exists
-        if (!existingReservation) {
-            console.log("Reservation not found");
-            return res.status(404).json({ message: 'Reservation not found' });
-        }
-
         // Update the reservation with the new date and time
-        existingReservation.date = newDate;
-        existingReservation.start_time = newStart;
-        existingReservation.end_time = newEndTime;
+        const { error: updateError } = await supabase
+            .from('reservation')
+            .update({
+                date: newDate,
+                start_time: newStart,
+                end_time: newEndTime
+            })
+            .match(reservationQuery);
 
-        // Update the reservation in the reservation collection
-        await reservationCollection.updateOne(reservationQuery, { $set: existingReservation });
-
-
-        // Retrieve lab based from labname
-        const lab = await labCollection.findOne({ name: labId});
-
-        console.log("Lab:", lab);
-
-        // Find the seat within the lab's seats array based on the provided seatNumber
-        const seat = lab.seats.find(seat => seat.seatNumber === seatNumber);
-        console.log("Seat:", seat);
-
-        // Find the index of the reservation in the seat's reservations array
-        const reservationIndex = seat.reservations.findIndex(reservation =>
-            reservation.date === date &&
-            reservation.start_time === start_time &&
-            reservation.end_time === end_time &&
-            reservation.reserved_by === reserved_by
-        );
-        console.log("Reservation Index:", reservationIndex);
-
-
-        
-
-        // Update the reservation in the seat's reservations array
-        seat.reservations[reservationIndex].date = newDate;
-        seat.reservations[reservationIndex].start_time = newStart;
-        seat.reservations[reservationIndex].end_time = newEndTime;
-
-        // Update the lab document
-        await labCollection.updateOne({ name: labId }, { $set: { seats: lab.seats } });
+        if (updateError) {
+            console.error("Error updating reservation:", updateError);
+            return res.status(500).json({ message: 'Error updating reservation' });
+        }
 
 
         // Send a response indicating success
@@ -331,15 +269,19 @@ exports.updateReservationProfile = async (req, res) => {
 
 exports.deleteAllReservationsBasedOnUser = async (req, res) => {
     try {
-        // Connect to the MongoDB database
-        const db = client.db(DB_NAME);
-        
         // Get the username from the session
         const username = req.session.username;
 
         // Delete all reservations associated with the session username
-        await db.collection('reservation').deleteMany({ reserved_by: username });
-        await db.collection('labs').deleteMany({ reserved_by: username });
+        const { error: deleteError } = await supabase
+            .from('reservation')
+            .delete()
+            .eq('reserved_by', username);
+
+        if (deleteError) {
+            console.error("Error deleting reservations:", deleteError);
+            return res.status(500).json({ message: 'Error deleting reservations' });
+        }
 
         // Respond with success message
         return res.status(200).json({ message: 'All reservations deleted successfully' });
@@ -352,54 +294,28 @@ exports.deleteAllReservationsBasedOnUser = async (req, res) => {
 
 
 exports.deleteReservationFromLab = async (req, res) => {
-    const db = client.db(DB_NAME);
-    const labs = db.collection('labs');
     try {
         const { lab_name, seatNumber, date, start_time, end_time, username } = req.body;
 
         console.log("Request Body:", req.body);
 
-        // Find the lab document by its name
-        const lab = await labs.findOne({ name: lab_name });
+        // Delete the reservation directly from the reservation table
+        const { error: deleteError } = await supabase
+            .from('reservation')
+            .delete()
+            .match({
+                lab_id: lab_name,
+                seatNumber: parseInt(seatNumber),
+                date: date,
+                start_time: start_time,
+                end_time: end_time,
+                reserved_by: username
+            });
 
-        if (!lab) {
-            console.log("Lab not found:", lab_name);
-            return res.status(404).json({ message: "Lab not found", lab_name });
+        if (deleteError) {
+            console.error("Error deleting reservation:", deleteError);
+            return res.status(500).json({ message: "Error deleting reservation" });
         }
-
-        console.log("Lab found:", lab);
-        console.log(parseInt(seatNumber))
-
-        // Find the seat object corresponding to the provided seat number
-        const seat = lab.seats.find(seat => seat.seatNumber === parseInt(seatNumber));
-
-        if (!seat) {
-            console.log("Seat not found:", seatNumber);
-            return res.status(404).json({ message: "Seat not found", seatNumber });
-        }
-
-        console.log("Seat found:", seat);
-
-        // Find the reservation to delete
-        const reservationIndex = seat.reservations.findIndex(reservation =>
-            reservation.date === date &&
-            reservation.start_time === start_time &&
-            reservation.end_time === end_time &&
-            reservation.reserved_by === username
-        );
-
-        if (reservationIndex === -1) {
-            console.log("Reservation not found");
-            return res.status(404).json({ message: "Reservation not found" });
-        }
-
-        console.log("Reservation found:", seat.reservations[reservationIndex]);
-
-        // Remove the reservation from the seat
-        seat.reservations.splice(reservationIndex, 1);
-
-        // Update the lab document in the database
-        await labs.updateOne({ name: lab_name }, { $set: { seats: lab.seats } });
 
         console.log("Reservation deleted successfully");
 

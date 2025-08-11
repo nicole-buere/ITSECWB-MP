@@ -1,7 +1,7 @@
 {
   "name": "apdev",
   "version": "1.0.0",
-  "description": "MCO1 - Lab Reservation App FrontEnd",
+  "description": "MCO1 - Lab Reservation App with Supabase Backend",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -11,6 +11,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@supabase/supabase-js": "^2.54.0",
     "bcrypt": "^5.1.1",
     "body-parser": "^1.20.2",
     "cors": "^2.8.5",
@@ -21,8 +22,6 @@
     "express-session": "^1.18.0",
     "handlebars": "^4.7.8",
     "hbs": "^4.2.0",
-    "mongodb": "^6.4.0",
-    "mongoose": "^8.2.1",
     "nodemon": "^3.0.3",
     "path": "^0.12.7",
     "uuid": "^9.0.1"

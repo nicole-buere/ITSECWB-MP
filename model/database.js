@@ -1,25 +1,35 @@
 
-const { MongoClient } = require('mongodb');
+const { createClient } = require('@supabase/supabase-js');
 const dotenv = require('dotenv');
 
 dotenv.config();
 
-const DB_CONN = process.env.DB_CONN;
-const DB_NAME = process.env.DB_NAME;
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_ANON_KEY;
 
-const client = new MongoClient(DB_CONN);
+if (!supabaseUrl || !supabaseKey) {
+    console.error('Missing Supabase environment variables. Please check your .env file.');
+    process.exit(1);
+}
 
-async function connectToMongoDB() {
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+async function testSupabaseConnection() {
     try {
-        await client.connect();
-        console.log("Connected to MongoDB");
+        const { data, error } = await supabase.from('users').select('count').limit(1);
+        if (error) {
+            console.error("Error testing Supabase connection:", error);
+            return false;
+        }
+        console.log("Connected to Supabase successfully");
+        return true;
     } catch (err) {
-        console.error("Error connecting to MongoDB:", err);
+        console.error("Error connecting to Supabase:", err);
+        return false;
     }
 }
 
 module.exports = {
-    client, 
-    connectToMongoDB,
-    DB_NAME, 
+    supabase,
+    testSupabaseConnection
 };

@@ -1,27 +1,23 @@
-const Reservation = require('../model/reservation');
-const {client, DB_NAME } = require('../model/database');
+const { supabase } = require('../model/database');
 
 
 exports.getUserReservations = async (req, res) => {
   try {
-    const db = client.db(DB_NAME);
-    const labs = db.collection('labs');
+    // Get all reservations from the reservation table
+    const { data: reservationList, error } = await supabase
+      .from('reservation')
+      .select('*');
 
-    // Find all labs
-    const allLabs = await labs.find().toArray();
+    if (error) {
+      console.error("Error fetching reservations:", error);
+      return res.status(500).json({ message: "Error fetching reservations" });
+    }
 
-    // Collect reservations from all labs
-    const reservationList = allLabs.reduce((acc, lab) => {
-        lab.seats.forEach(seat => {
-            acc.push(...seat.reservations);
-        });
-        return acc;
-    }, []);
-
-    res.json(reservationList);
-} catch (e) {
+    res.json(reservationList || []);
+  } catch (e) {
+    console.error("Error in getUserReservations:", e);
     res.status(500).json({ message: e.message });
-}
+  }
 };
 
 
@@ -35,16 +31,24 @@ exports.getReservationByUsername = async (req, res) => {
   
       const username = req.session.username;
   
-      const db = client.db(DB_NAME);
-      const reservation = db.collection('reservation');
-      const reservationList = await reservation.find({ username: username }).sort({ id: -1 }).toArray();
+      const { data: reservationList, error } = await supabase
+        .from('reservation')
+        .select('*')
+        .eq('reserved_by', username)
+        .order('id', { ascending: false });
   
-      if (!reservationList.length) {
+      if (error) {
+        console.error("Error fetching reservations:", error);
+        return res.status(500).json({ message: "Error fetching reservations" });
+      }
+  
+      if (!reservationList || !reservationList.length) {
         return res.status(404).json({ message: "Reservation not found" });
       }
   
       res.json(reservationList);
     } catch (e) {
+      console.error("Error in getReservationByUsername:", e);
       res.status(500).json({ message: e.message });
     }
   };
@@ -52,22 +56,19 @@ exports.getReservationByUsername = async (req, res) => {
   
   exports.getAllReservations = async (req, res) => {
     try {
-        const db = client.db(DB_NAME);
-        const labs = db.collection('labs');
+        // Get all reservations from the reservation table
+        const { data: reservationList, error } = await supabase
+          .from('reservation')
+          .select('*');
 
-        // Find all labs
-        const allLabs = await labs.find().toArray();
+        if (error) {
+          console.error("Error fetching reservations:", error);
+          return res.status(500).json({ message: "Error fetching reservations" });
+        }
 
-        // Collect reservations from all labs
-        const reservationList = allLabs.reduce((acc, lab) => {
-            lab.seats.forEach(seat => {
-                acc.push(...seat.reservations);
-            });
-            return acc;
-        }, []);
-
-        res.json(reservationList);
+        res.json(reservationList || []);
     } catch (e) {
+        console.error("Error in getAllReservations:", e);
         res.status(500).json({ message: e.message });
     }
 };
@@ -76,35 +77,43 @@ exports.updateReservation = async (req, res) => {
   try {
       const { date, username, start_time, end_time } = req.body;
 
-      // Find the reservation that matches the provided criteria
-      const reservation = await Reservation.findOne({
+      // Prepare update data
+      const updateData = {};
+      if (req.body.newDate) {
+          updateData.date = req.body.newDate;
+      }
+      if (req.body.newStartTime) {
+          updateData.start_time = req.body.newStartTime;
+      }
+      if (req.body.newEndTime) {
+          updateData.end_time = req.body.newEndTime;
+      }
+
+      // Update the reservation
+      const { data: updatedReservation, error } = await supabase
+        .from('reservation')
+        .update(updateData)
+        .match({
           date: date,
           reserved_by: username,
           start_time: start_time,
           end_time: end_time
-      });
+        })
+        .select()
+        .single();
 
-      if (!reservation) {
-          return res.status(404).json({ message: 'Reservation not found' });
+      if (error) {
+        console.error("Error updating reservation:", error);
+        return res.status(500).json({ message: 'Error updating reservation' });
       }
 
-      // Update the date and time if they are provided in the request body
-      if (req.body.newDate) {
-          reservation.date = req.body.newDate;
-      }
-      if (req.body.newStartTime) {
-          reservation.start_time = req.body.newStartTime;
-      }
-      if (req.body.newEndTime) {
-          reservation.end_time = req.body.newEndTime;
+      if (!updatedReservation) {
+        return res.status(404).json({ message: 'Reservation not found' });
       }
 
-      // Save the updated reservation
-      await reservation.save();
-
-      res.status(200).json({ message: 'Reservation updated successfully', reservation });
+      res.status(200).json({ message: 'Reservation updated successfully', reservation: updatedReservation });
   } catch (error) {
-      console.error(error);
+      console.error("Error in updateReservation:", error);
       res.status(500).json({ message: 'Internal server error' });
   }
 };

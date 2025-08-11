@@ -5,7 +5,7 @@ const session = require('express-session');
 const hbs = require('hbs');
 const userRoutes = require('./routes/userRoutes.js');
 const labroutes = require('./routes/labRoutes.js');
-const { client, connectToMongoDB, DB_NAME } = require('./model/database.js');
+const { supabase, testSupabaseConnection } = require('./model/database.js');
 const cors = require('cors');
 
 const app = express();
@@ -17,8 +17,8 @@ app.set('view engine', '.hbs');
 app.set('views', path.join(__dirname, 'views'));
 
 
-// Connect to MongoDB
-connectToMongoDB();
+// Test Supabase connection
+testSupabaseConnection();
 
 // Use body-parser middleware
 app.use(cors())
@@ -86,14 +86,23 @@ app.get('/home', (req, res) => {
 app.get('/profile', async (req, res) => {
     try {
         const username = req.session.username; 
-        const db = client.db(DB_NAME);
-        const users = db.collection('users');
-        const user = await users.findOne({ username });
+        const { data: user, error: userError } = await supabase
+            .from('users')
+            .select('*')
+            .eq('username', username)
+            .single();
+
+        if (userError) {
+            console.error("Error fetching user:", userError);
+            return res.status(500).render('error', { message: 'Internal server error' });
+        }
 
         if (user) {
             if (user.role == 'student'){
-                const reservation = db.collection('reservation');
-                const Reservation = await reservation.find({ reserved_by: user.username }).toArray();
+                const { data: Reservation, error: resError } = await supabase
+                    .from('reservation')
+                    .select('*')
+                    .eq('reserved_by', user.username);
 
 
                 console.log("User Reservations:", Reservation); // Log the reservations to the console
@@ -107,8 +116,10 @@ app.get('/profile', async (req, res) => {
 
             } else {
 
-                const reservation = db.collection('reservation');
-                const Reservation = await reservation.find({ reserved_by: user.username }).toArray();
+                const { data: Reservation, error: resError } = await supabase
+                    .from('reservation')
+                    .select('*')
+                    .eq('reserved_by', user.username);
 
 
                 console.log("User Reservations:", Reservation); // Log the reservations to the console
@@ -137,9 +148,11 @@ app.get('/profile', async (req, res) => {
 app.get('/edittprofile', async (req, res) => {
     try {
         const username = req.session.username; 
-        const db = client.db(DB_NAME);
-        const users = db.collection('users');
-        const user = await users.findOne({ username });
+        const { data: user, error: userError } = await supabase
+            .from('users')
+            .select('*')
+            .eq('username', username)
+            .single();
 
         if (user) {
             
@@ -161,15 +174,26 @@ app.get('/edittprofile', async (req, res) => {
 app.get('/reserve', async (req, res) => {
     try {
         const username = req.session.username;
-        const db = client.db(DB_NAME);
-        const users = db.collection('users');
-        const user = await users.findOne({ username });
+        const { data: user, error: userError } = await supabase
+            .from('users')
+            .select('*')
+            .eq('username', username)
+            .single();
+        
+        if (userError) {
+            console.error("Error fetching user:", userError);
+            return res.status(500).json({ message: 'Internal server error' });
+        }
+        
         if (user) {
-            const reservation = db.collection('reservation');
             let Reservation;
 
             if (user.role === 'student') {
-                Reservation = await reservation.find({ reserved_by: user.username }).toArray();
+                const { data: userReservations, error: resError } = await supabase
+                    .from('reservation')
+                    .select('*')
+                    .eq('reserved_by', user.username);
+                Reservation = userReservations;
                 console.log("User Reservations:", Reservation); // Log the reservations to the console
  
                 res.render('reservations_current', {
@@ -179,7 +203,10 @@ app.get('/reserve', async (req, res) => {
             });
 
             } else {
-                Reservation = await reservation.find().toArray();
+                const { data: allReservations, error: resError } = await supabase
+                    .from('reservation')
+                    .select('*');
+                Reservation = allReservations;
 
                 console.log("User Reservations:", Reservation); // Log the reservations to the console
 
@@ -200,13 +227,22 @@ app.get('/reserve', async (req, res) => {
 app.get('/viewprofile', async (req, res) => {
     try {
         const username = req.query.username;
-        const db = client.db(DB_NAME);
-        const users = db.collection('users');
-        const user = await users.findOne({ username });
+        const { data: user, error: userError } = await supabase
+            .from('users')
+            .select('*')
+            .eq('username', username)
+            .single();
+
+        if (userError) {
+            console.error("Error fetching user:", userError);
+            return res.status(500).json({ message: 'Internal server error' });
+        }
 
         if (user) {
-            const reservation = db.collection('reservation');
-            const Reservation = await reservation.find({ reserved_by: user.username }).toArray();
+            const { data: Reservation, error: resError } = await supabase
+                .from('reservation')
+                .select('*')
+                .eq('reserved_by', user.username);
             console.log("User Reservations:", Reservation); // Log the reservations to the console
 
             res.render('profile_view', {
@@ -233,9 +269,11 @@ app.get('/viewprofile', async (req, res) => {
 app.post('/reservation/:labId', async (req, res) => {
     if (req.session.authenticated) {
         try {
-            const db = client.db(DB_NAME);
-            const labs = db.collection('labs');
-            const lab = await labs.findOne({ name: req.params.labId });
+            const { data: lab, error: labError } = await supabase
+                .from('labs')
+                .select('*')
+                .eq('name', req.params.labId)
+                .single();
 
             if (!lab) {
                 return res.status(404).json({ message: 'Lab not found' });
