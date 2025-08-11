@@ -1,5 +1,5 @@
 # 🚨 Branch Rules
-1. Always branch from `development` ⚠ **Never create a branch based on `ignore-branch`**  
+1. Always branch from `development` ⚠ **Never create a branch based on `main`**  
 2. NEVER push directly to the main branch.
 3. Only the feature owner merges into main.
 4. All merges must be reviewed by another teammate.
