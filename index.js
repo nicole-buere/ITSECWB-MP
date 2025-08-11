@@ -81,7 +81,14 @@ app.get('/home', (req, res) => {
     if (req.session.authenticated) {
         res.render('homepage', { title: 'Labyrinth - Home Page', username: req.session.username });
     } else {
-        res.status(401).json({ message: 'Unauthorized' });
+        res.status(401).render('error_page', {
+            title: 'Unauthorized Access',
+            errorCode: '401',
+            errorTitle: 'Unauthorized Access',
+            errorMessage: 'You need to log in to access this page.',
+            errorDescription: 'This page requires authentication. Please log in with your account credentials.',
+            showLogin: true
+        });
     }
 });
 
@@ -262,10 +269,24 @@ app.get('/reserve', async (req, res) => {
             }
         } catch (error) {
             console.error("Error fetching reservations:", error);
-            res.status(500).json({ message: 'Internal server error' });
+            res.status(500).render('error_page', {
+                title: 'Internal Server Error',
+                errorCode: '500',
+                errorTitle: 'Internal Server Error',
+                errorMessage: 'Something went wrong while fetching reservations.',
+                errorDescription: 'We encountered an issue while retrieving your reservation data. Please try again later.',
+                showLogin: false
+            });
         }
     } else {
-        res.status(401).json({ message: 'Unauthorized' });
+        res.status(401).render('error_page', {
+            title: 'Unauthorized Access',
+            errorCode: '401',
+            errorTitle: 'Unauthorized Access',
+            errorMessage: 'You need to log in to access this page.',
+            errorDescription: 'This page requires authentication. Please log in with your account credentials.',
+            showLogin: true
+        });
     }
 });
 
@@ -402,7 +423,14 @@ app.post('/reservation/:labId', async (req, res) => {
 
         } catch (err) {
             console.error(err);
-            res.status(500).json({ message: 'Internal server error' });
+            res.status(500).render('error_page', {
+                title: 'Internal Server Error',
+                errorCode: '500',
+                errorTitle: 'Internal Server Error',
+                errorMessage: 'Something went wrong while processing your reservation.',
+                errorDescription: 'We encountered an issue while processing your reservation request. Please try again later.',
+                showLogin: false
+            });
         }
     } else {
         res.status(401).json({ message: 'Unauthorized' });
@@ -423,7 +451,14 @@ app.get('/editReservation/:labId/:seatNumber/:date/:start_time/:end_time/:reserv
         res.render('editReservation', { title: 'Edit Reservation', labId, seatNumber, date, start_time, end_time, reserved_by });
     } else {
         // Unauthorized access
-        res.status(401).json({ message: 'Unauthorized' });
+        res.status(401).render('error_page', {
+            title: 'Unauthorized Access',
+            errorCode: '401',
+            errorTitle: 'Unauthorized Access',
+            errorMessage: 'You need to log in to access this page.',
+            errorDescription: 'This page requires authentication. Please log in with your account credentials.',
+            showLogin: true
+        });
     }
 });
 
