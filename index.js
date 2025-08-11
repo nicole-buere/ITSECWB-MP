@@ -172,55 +172,62 @@ app.get('/edittprofile', async (req, res) => {
     }
 });
 app.get('/reserve', async (req, res) => {
-    try {
-        const username = req.session.username;
-        const { data: user, error: userError } = await supabase
-            .from('users')
-            .select('*')
-            .eq('username', username)
-            .single();
-        
-        if (userError) {
-            console.error("Error fetching user:", userError);
-            return res.status(500).json({ message: 'Internal server error' });
-        }
-        
-        if (user) {
-            let Reservation;
+    if (req.session.authenticated) {
+        try {
+            const username = req.session.username;
+            const { data: user, error: userError } = await supabase
+                .from('users')
+                .select('*')
+                .eq('username', username)
+                .single();
+            
+            if (userError) {
+                console.error("Error fetching user:", userError);
+                return res.status(500).json({ message: 'Internal server error' });
+            }
+            
+            if (user) {
+                let Reservation;
 
-            if (user.role === 'student') {
-                const { data: userReservations, error: resError } = await supabase
-                    .from('reservation')
-                    .select('*')
-                    .eq('reserved_by', user.username);
-                Reservation = userReservations;
-                console.log("User Reservations:", Reservation); // Log the reservations to the console
- 
-                res.render('reservations_current', {
-                title: 'Labyrinth - Current Reservations Page',
-                user: user, // Pass the user object to the template
-                Reservation: Reservation
-            });
+                if (user.role === 'student') {
+                    const { data: userReservations, error: resError } = await supabase
+                        .from('reservation')
+                        .select('*')
+                        .eq('reserved_by', user.username);
+                    Reservation = userReservations;
+                    console.log("User Reservations:", Reservation); // Log the reservations to the console
+     
+                    res.render('reservations_current', {
+                        title: 'Labyrinth - Current Reservations Page',
+                        user: user, // Pass the user object to the template
+                        Reservation: Reservation
+                    });
 
+                } else {
+                    const { data: allReservations, error: resError } = await supabase
+                        .from('reservation')
+                        .select('*');
+                    Reservation = allReservations;
+
+                    console.log("User Reservations:", Reservation); // Log the reservations to the console
+
+                    res.render('reservations_current', {
+                        title: 'Labyrinth - Current Reservations Page',
+                        user: user, // Pass the user object to the template
+                        Reservation: Reservation
+                    });
+                }
             } else {
-                const { data: allReservations, error: resError } = await supabase
-                    .from('reservation')
-                    .select('*');
-                Reservation = allReservations;
-
-                console.log("User Reservations:", Reservation); // Log the reservations to the console
-
-                res.render('reservations_current', {
-                    title: 'Labyrinth - Current Reservations Page',
-                    user: user, // Pass the user object to the template
-                    Reservation: Reservation
-                });
-            }}
+                res.status(404).json({ message: 'User not found' });
+            }
         } catch (error) {
             console.error("Error fetching reservations:", error);
             res.status(500).json({ message: 'Internal server error' });
         }
-    });
+    } else {
+        res.status(401).json({ message: 'Unauthorized' });
+    }
+});
 
 // Handle GET request to the /profile route
 //for viewing commented out const etc.
