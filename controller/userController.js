@@ -51,7 +51,6 @@ exports.registerUser = async (req, res) => {
             role,
             description: '',
             profilePicture: 'https://www.redditstatic.com/avatars/avatar_default_02_4856A3.png',
-            reservations: [],
         };
 
         // Save the new user to the database
