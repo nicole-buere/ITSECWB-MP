@@ -28,7 +28,7 @@ exports.registerUser = async (req, res) => {
         }
 
         // Check if password meets minimum length (8)
-        if (password.length !== 8) {
+        if (password.length < 8) {
             res.status(400).json({ message: "Password must be at least 8 characters!" });
             return;
         }
