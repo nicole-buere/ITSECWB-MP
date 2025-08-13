@@ -21,7 +21,8 @@ document.addEventListener('DOMContentLoaded', () => {
             window.location.href = '/home'
             // window.location.href = `/profile?username=${username}`;
         } else {
-            alert("Incorrect paswsord")
+            const errData = await response.json();
+            alert(errData.message);
         }
  
 

@@ -1,60 +1,96 @@
 const { supabase } = require('../model/database');
 const bcrypt = require("bcrypt");
 
-/// Helper function for logging both succesful and failed logins
+const MAX_FAILED_BEFORE_LOCK = 5; // Threshold before exponential lockout
+const BASE_LOCK_SECONDS = 2;      // Base seconds for exponential backoff
+
+/// Helper function for logging logins and lockout mechanism
+// Lockout mechanism is based on Amazon Cognito's exponential lockouts
 async function logLoginAttempt(username, ip, success) {
     try {
-        const attemptedAt = new Date();
+        const now = new Date();
+
+        // Check if username exists in users table
+        const { data: user } = await supabase
+            .from('users')
+            .select('id')
+            .eq('username', username)
+            .single();
+
+        const userID = user ? user.id : null;
+
+        // Fetch current log row
+        const { data: log } = await supabase
+            .from('login_attempts_logs')
+            .select('*')
+            .eq('username', username)
+            .single();
 
         if (success) {
-            // Reset attemptNum on success
+            // Reset on successful login
             await supabase
                 .from('login_attempts_logs')
-                // Shortcut instead of doing SELECT and INSERT
                 .upsert({
                     username,
+                    userID,              
                     attemptNum: 0,
                     ip_address: ip,
-                    attemptedAt,
-                    status: true
+                    attemptedAt: now,
+                    status: true,
+                    lockedUntil: null
                 }, { onConflict: ['username'] });
-        } else {
-            // Check if exists
-            const { data, error: fetchError } = await supabase
-                .from('login_attempts_logs')
-                .select('attemptNum')
-                .eq('username', username)
-                .single();
-
-            if (fetchError) {
-                // Insert account if it doesn't exist
-                await supabase
-                    .from('login_attempts_logs')
-                    .insert([{
-                        username,
-                        attemptNum: 1,
-                        ip_address: ip,
-                        attemptedAt,
-                        status: false
-                    }]);
-            } else {
-                // Increment by 1 if it exists
-                await supabase
-                    .from('login_attempts_logs')
-                    .update({
-                        attemptNum: (data?.attemptNum || 0) + 1,
-                        ip_address: ip,
-                        attemptedAt,
-                        status: false
-                    })
-                    .eq('username', username);
-            }
+            return;
         }
+
+        // Failed Logins
+        let newAttemptNum = 1;
+
+        if (log) {
+            // If account is locked, ignore any login attemmpts (do not increment) but update timestamp and ip
+            if (log.lockedUntil && new Date(log.lockedUntil) > now) {
+                await supabase
+                    .from('login_attempts_logs')
+                    .update({ attemptedAt: now, ip_address: ip })
+                    .eq('username', username);
+                return;
+            }
+            newAttemptNum = (log.attemptNum || 0) + 1;
+        }
+
+        // Calculate exponential lockout duration
+        // lockSeconds = 2^(attemptsOverThreshold) * BASE_LOCK_SECONDS or 2^(n-5) seconds
+        let lockedUntil = null;
+        if (newAttemptNum > MAX_FAILED_BEFORE_LOCK) {
+            const exponent = newAttemptNum - MAX_FAILED_BEFORE_LOCK;
+            const lockSeconds = Math.pow(2, exponent) * BASE_LOCK_SECONDS;
+            lockedUntil = new Date(now.getTime() + lockSeconds * 1000);
+        }
+
+        // Updates log row
+        const updateData = {
+            attemptNum: newAttemptNum,
+            ip_address: ip,
+            attemptedAt: now,
+            status: false,
+            lockedUntil,
+            userID
+        };
+
+        if (log) {
+            await supabase
+                .from('login_attempts_logs')
+                .update(updateData)
+                .eq('username', username);
+        } else {
+            await supabase
+                .from('login_attempts_logs')
+                .insert([{ username, ...updateData }]);
+        }
+
     } catch (err) {
         console.error("Unexpected error in logLoginAttempt:", err);
     }
 }
-
 
 
 exports.registerUser = async (req, res) => {
@@ -126,17 +162,26 @@ exports.loginUser = async (req, res) => {
             .select('*')
             .eq('username', username)
             .single();
-
-        if (findError) {
+        
+        if (findError || !user) {
             console.error("Error finding user:", findError);
             await logLoginAttempt(username, ipAddress, false);
             return res.status(401).json({ message: "Invalid credentials!" });
         }
 
-        if (!user) {
-            await logLoginAttempt(username, ipAddress, false);
-            return res.status(401).json({ message: "Invalid credentials!" });
-        } 
+        // Retrive row of corresponding username attempting to login
+        const { data: log } = await supabase
+            .from('login_attempts_logs')
+            .select('*')
+            .eq('username', username)
+            .single();
+        
+        // Displays lockout timer
+        if (log && log.lockedUntil && new Date(log.lockedUntil) > new Date()) {
+            return res.status(403).json({
+                message: `Account temporarily locked. Try again after ${new Date(log.lockedUntil).toLocaleTimeString()}`
+            });
+        }
 
         // Debugging 
         console.log ("Inputted Password: ", password)
