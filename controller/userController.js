@@ -157,7 +157,14 @@ exports.enrollKba = async (req, res) => {
 exports.getKbaQuestionForToken = async (req, res) => {
   try {
     const { token } = req.query || {};
-    if (!token) return res.status(400).json({ message: 'Missing token' });
+    const xfwd = (req.headers['x-forwarded-for'] || '').toString();
+    const ip   = xfwd ? xfwd.split(',')[0].trim() : (req.connection?.remoteAddress || req.ip || '');
+
+    if (!token) {
+      // LOG
+      await logActivity(null, 'kba_prompt_failed (missing_token)', ip);
+      return res.status(400).json({ message: 'Missing token' });
+    }
 
     const tokenHash = crypto.createHmac('sha256', RESET_TOKEN_PEPPER).update(token).digest('hex');
 
@@ -167,21 +174,30 @@ exports.getKbaQuestionForToken = async (req, res) => {
       .eq('token_hash', tokenHash)
       .limit(1);
 
-    if (!rows || !rows.length) return res.status(404).json({ message: 'Invalid token' });
-    const row = rows[0];
-    if (row.consumed_at || new Date(row.expires_at).getTime() < Date.now()) {
+    if (!rows || !rows.length) {
+      // LOG
+      await logActivity(null, 'kba_prompt_failed (invalid_token)', ip);
       return res.status(404).json({ message: 'Invalid token' });
     }
 
-    // Does this user have any KBA?
+    const row = rows[0];
+    if (row.consumed_at || new Date(row.expires_at).getTime() < Date.now()) {
+      // LOG
+      await logActivity(row.user_id, 'kba_prompt_failed (expired_or_consumed_token)', ip);
+      return res.status(404).json({ message: 'Invalid token' });
+    }
+
     const { data: kba } = await supabase
       .from('user_security_answers')
       .select('question_id')
       .eq('user_id', row.user_id);
 
-    if (!kba || !kba.length) return res.status(204).end(); // no KBA set
+    if (!kba || !kba.length) {
+      // LOG
+      await logActivity(row.user_id, 'kba_prompt_skipped (no_kba_set)', ip);
+      return res.status(204).end();
+    }
 
-    // Pick one at random and return the prompt
     const picked = kba[Math.floor(Math.random() * kba.length)];
     const { data: q } = await supabase
       .from('security_questions')
@@ -189,43 +205,52 @@ exports.getKbaQuestionForToken = async (req, res) => {
       .eq('id', picked.question_id)
       .single();
 
+    // LOG
+    await logActivity(row.user_id, 'kba_prompt_served', ip, { question_id: picked.question_id });
+
     return res.json({ question_id: picked.question_id, prompt: q?.prompt || 'Answer your security question.' });
   } catch (e) {
     console.error('getKbaQuestionForToken error:', e);
+    await logActivity(null, 'kba_prompt_failed (server_error)', req.ip);
     return res.status(500).json({ message: 'Internal server error' });
   }
 };
+
 
 // POST /api/users/forgot-password
 exports.requestPasswordReset = async (req, res) => {
   try {
     const { emailOrUsername } = req.body || {};
+    const xfwd = (req.headers['x-forwarded-for'] || '').toString();
+    const ip   = xfwd ? xfwd.split(',')[0].trim() : (req.connection?.remoteAddress || req.ip || '');
+
     if (!emailOrUsername) {
+      // LOG: missing field
+      await logActivity(null, 'password_reset_request_failed (missing_field)', ip, { field: 'emailOrUsername' });
       return res.status(400).json({ message: 'Missing field' });
     }
 
-    // Find by email OR username (do NOT leak whether user exists)
     const { data: user } = await supabase
       .from('users')
-      .select('id, email, username') // include username for email body
+      .select('id, email, username')
       .or(`email.eq.${emailOrUsername},username.eq.${emailOrUsername}`)
       .single();
 
-    // Always respond 200 (avoid enumeration)
     if (!user) {
+      // LOG: request for unknown account (don’t leak to client)
+      await logActivity(null, 'password_reset_request_for_unknown_account', ip, { identifier: emailOrUsername });
       return res.status(200).json({ message: 'If an account exists, a reset link has been sent.' });
     }
 
-    // Revoke any older unconsumed tokens for this user
-    await supabase
-      .from('password_reset_tokens')
+    // Revoke old tokens
+    await supabase.from('password_reset_tokens')
       .delete()
       .eq('user_id', user.id)
       .is('consumed_at', null);
 
-    // Create a new single-use token
-    const rawToken = crypto.randomBytes(32).toString('hex');
-    const tokenHash = hashToken(rawToken); // uses your helper/pepper
+    // Create new token
+    const rawToken  = crypto.randomBytes(32).toString('hex');
+    const tokenHash = hashToken(rawToken);
     const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MIN * 60 * 1000).toISOString();
 
     const { error: insErr } = await supabase
@@ -233,49 +258,65 @@ exports.requestPasswordReset = async (req, res) => {
       .insert([{ user_id: user.id, token_hash: tokenHash, expires_at: expiresAt }]);
 
     if (insErr) {
-      console.error('reset token insert error:', insErr);
+      // LOG: db error creating token
+      await logActivity(user.id, 'password_reset_request_failed (db_insert_token)', ip);
       return res.status(500).json({ message: 'Could not start reset.' });
     }
 
-    // Build link & send email
+    // LOG: token successfully created
+    await logActivity(user.id, 'password_reset_requested', ip, { ttl_min: RESET_TOKEN_TTL_MIN });
+
+    // Send email
     const base = APP_BASE_URL || `${req.protocol}://${req.get('host')}`;
     const resetLink = `${base}/reset-password?token=${rawToken}`;
 
     try {
-    await sendMail({
-    to: user.email,
-    subject: 'Reset your Labyrinth password',
-    html: `
-        <p>Hello ${user.username || ''},</p>
-        <p>Click below to reset your password (valid ${RESET_TOKEN_TTL_MIN} minutes):</p>
-        <p><a href="${resetLink}">Reset Password</a></p>
-        <p style="font-size:12px;color:#666">Or copy: ${resetLink}</p>
-    `,
-    });
-
+      await sendMail({
+        to: user.email,
+        subject: 'Reset your Labyrinth password',
+        html: `
+          <p>Hello ${user.username || ''},</p>
+          <p>Click below to reset your password (valid ${RESET_TOKEN_TTL_MIN} minutes):</p>
+          <p><a href="${resetLink}">Reset Password</a></p>
+          <p style="font-size:12px;color:#666">Or copy: ${resetLink}</p>
+        `,
+      });
+      // LOG: email successfully queued
+      await logActivity(user.id, 'password_reset_email_sent', ip);
     } catch (e) {
       console.error('Email send failed:', e);
-      // Still return generic success to avoid user enumeration
+      // LOG: email sending failed (we still return generic success)
+      await logActivity(user.id, 'password_reset_email_failed', ip);
     }
 
     return res.status(200).json({ message: 'If an account exists, a reset link has been sent.' });
   } catch (e) {
     console.error('requestPasswordReset error:', e);
+    // LOG: unexpected server error
+    await logActivity(null, 'password_reset_request_failed (server_error)', req.ip);
     return res.status(500).json({ message: 'Internal server error' });
   }
 };
+
 
 // POST /api/users/reset-password
 // POST /api/users/reset-password
 exports.resetPassword = async (req, res) => {
   try {
     const { token, newPassword, kbaAnswer, question_id } = req.body || {};
+    const xfwd = (req.headers['x-forwarded-for'] || '').toString();
+    const ip   = xfwd ? xfwd.split(',')[0].trim() : (req.connection?.remoteAddress || req.ip || '');
+
     if (!token || !newPassword) {
+      // LOG
+      await logActivity(null, 'password_reset_failed (missing_fields)', ip);
       return res.status(400).json({ message: 'Missing fields' });
     }
 
-    // Enforce password complexity (same regex as register/change)
+    // Enforce complexity
     if (!COMPLEXITY.test(newPassword)) {
+      // LOG
+      await logActivity(null, 'password_reset_failed (complexity)', ip);
       return res.status(400).json({
         message: 'Password must be ≥8 chars and include uppercase, lowercase, a number, and a symbol (@#$%^&+=).'
       });
@@ -291,15 +332,19 @@ exports.resetPassword = async (req, res) => {
       .limit(1);
 
     if (findTokErr || !tokens || tokens.length === 0) {
+      // LOG
+      await logActivity(null, 'password_reset_failed (invalid_or_used_token)', ip);
       return res.status(400).json({ message: 'Invalid or used token.' });
     }
 
     const tok = tokens[0];
     if (new Date(tok.expires_at).getTime() < Date.now()) {
+      // LOG
+      await logActivity(tok.user_id, 'password_reset_failed (expired_token)', ip);
       return res.status(400).json({ message: 'Token expired.' });
     }
 
-    // Load user and current hash/timestamps
+    // Load user
     const { data: user, error: userErr } = await supabase
       .from('users')
       .select('id, username, password, password_changed_at, created_at')
@@ -307,15 +352,19 @@ exports.resetPassword = async (req, res) => {
       .single();
 
     if (userErr || !user) {
+      // LOG
+      await logActivity(null, 'password_reset_failed (user_lookup)', ip);
       return res.status(400).json({ message: 'Invalid token.' });
     }
 
-    // Prevent reuse: current hash
+    // Current reuse
     if (await bcrypt.compare(newPassword, user.password)) {
+      // LOG
+      await logActivity(user.id, 'password_reset_failed (reused_current)', ip);
       return res.status(400).json({ message: 'New password must differ from current.' });
     }
 
-    // Prevent reuse: last N hashes
+    // Last N history reuse
     const { data: history, error: histReadErr } = await supabase
       .from('user_password_history')
       .select('hash')
@@ -324,15 +373,19 @@ exports.resetPassword = async (req, res) => {
       .limit(PASSWORD_HISTORY_LIMIT);
 
     if (histReadErr) {
+      // LOG
+      await logActivity(user.id, 'password_reset_failed (history_read_error)', ip);
       return res.status(500).json({ message: 'Could not read password history.' });
     }
     for (const h of history || []) {
       if (await bcrypt.compare(newPassword, h.hash)) {
+        // LOG
+        await logActivity(user.id, 'password_reset_failed (reused_recent)', ip);
         return res.status(400).json({ message: 'Password was used recently. Pick a different one.' });
       }
     }
 
-    // --- KBA CHECK (if the user has KBA enrolled) ---
+    // KBA check (if enrolled)
     const { data: kbaList } = await supabase
       .from('user_security_answers')
       .select('question_id, answer_hash')
@@ -340,48 +393,56 @@ exports.resetPassword = async (req, res) => {
 
     if (kbaList && kbaList.length > 0) {
       if (!kbaAnswer || !question_id) {
+        // LOG
+        await logActivity(user.id, 'password_reset_failed (kba_missing)', ip);
         return res.status(400).json({ message: 'Security answer required.' });
       }
       const entry = (kbaList || []).find(x => x.question_id === Number(question_id));
       if (!entry) {
+        // LOG
+        await logActivity(user.id, 'password_reset_failed (kba_question_mismatch)', ip);
         return res.status(400).json({ message: 'Security question mismatch.' });
       }
       const ok = await verifyAnswer(kbaAnswer, entry.answer_hash);
       if (!ok) {
+        // LOG
+        await logActivity(user.id, 'password_reset_failed (kba_failed)', ip);
         return res.status(401).json({ message: 'Security check failed.' });
       }
     }
-    // -------------------------------------------------
 
-    // Hash new password AFTER all checks pass
+    // Hash new password
     const newHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
 
-    // Rotate history: store old hash
+    // Rotate history
     const { error: histInsErr } = await supabase
       .from('user_password_history')
       .insert([{ user_id: user.id, username: user.username, hash: user.password }]);
     if (histInsErr) {
+      // LOG
+      await logActivity(user.id, 'password_reset_failed (history_insert_error)', ip);
       return res.status(500).json({ message: 'Could not update password history.' });
     }
 
-    // Update password + timestamp
+    // Update user password
     const { error: updErr } = await supabase
       .from('users')
       .update({ password: newHash, password_changed_at: new Date().toISOString() })
       .eq('id', user.id);
-
     if (updErr) {
+      // LOG
+      await logActivity(user.id, 'password_reset_failed (user_update_error)', ip);
       return res.status(500).json({ message: 'Could not update password.' });
     }
 
-    // Consume this and any other open tokens for the user (so only one reset works)
+    // Consume tokens
     await supabase
       .from('password_reset_tokens')
       .update({ consumed_at: new Date().toISOString() })
       .eq('user_id', user.id)
       .is('consumed_at', null);
 
-    // Trim history beyond N
+    // Trim history
     const { data: allRows } = await supabase
       .from('user_password_history')
       .select('id')
@@ -393,22 +454,31 @@ exports.resetPassword = async (req, res) => {
       await supabase.from('user_password_history').delete().in('id', extraIds);
     }
 
-    await logActivity(user.id, 'Reset password via email link', req.ip);
+    // LOG: success
+    await logActivity(user.id, 'password_reset_success', ip);
+
     return res.status(200).json({ message: 'Password has been reset.' });
   } catch (e) {
     console.error('resetPassword error:', e);
+    await logActivity(null, 'password_reset_failed (server_error)', req.ip);
     return res.status(500).json({ message: 'Internal server error' });
   }
 };
 
+
 // Simple activity logger (non-blocking)
-async function logActivity(userId, activity, ip) {
+// Simple activity logger (non-blocking) — logs even when userId is null
+async function logActivity(userId, activity, ip, meta) {
   try {
-    if (!userId) return; // safety
-    const text = ip ? `${activity} (ip: ${ip})` : activity;
+    // never include secrets in meta; keep small to avoid circular JSON
+    let suffix = '';
+    if (ip)   suffix += ` ip:${ip}`;
+    if (meta) suffix += ` meta:${JSON.stringify(meta).slice(0, 200)}`;
+
+    const text = `${activity}${suffix}`;
     const { error } = await supabase
       .from('activity_logs')
-      .insert([{ activity: text, activity_done_by: userId }]);
+      .insert([{ activity: text, activity_done_by: userId || null }]); // allow null
     if (error) console.warn('activity_logs insert error:', error);
   } catch (e) {
     console.warn('activity_logs unexpected error:', e);
@@ -508,30 +578,41 @@ async function logLoginAttempt(username, ip, success) {
 exports.changePassword = async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
+    const xfwd = (req.headers['x-forwarded-for'] || '').toString();
+    const ip   = xfwd ? xfwd.split(',')[0].trim() : (req.connection?.remoteAddress || req.ip || '');
 
     if (!currentPassword || !newPassword) {
+      // LOG
+      await logActivity(req.session?.user?.id || null, 'change_password_failed (missing_fields)', ip);
       return res.status(400).json({ message: 'Missing fields' });
     }
     if (newPassword.length < 8) {
+      // LOG
+      await logActivity(req.session?.user?.id || null, 'change_password_failed (too_short)', ip);
       return res.status(400).json({ message: 'Password must be at least 8 characters!' });
     }
     if (!req.session?.username) {
+      // LOG
+      await logActivity(null, 'change_password_failed (not_authenticated)', ip);
       return res.status(401).json({ message: 'Not authenticated' });
     }
 
-    // 1) Load user (need id, current hash, and timestamps)
     const { data: user, error: findErr } = await supabase
       .from('users')
       .select('id, username, password, password_changed_at, created_at')
       .eq('username', req.session.username)
       .single();
-    if (findErr || !user) return res.status(401).json({ message: 'User not found' });
+    if (findErr || !user) {
+      await logActivity(null, 'change_password_failed (user_not_found)', ip);
+      return res.status(401).json({ message: 'User not found' });
+    }
 
-    // 2) Verify current password
     const ok = await bcrypt.compare(currentPassword, user.password);
-    if (!ok) return res.status(400).json({ message: 'Current password is incorrect' });
+    if (!ok) {
+      await logActivity(user.id, 'change_password_failed (wrong_current)', ip);
+      return res.status(400).json({ message: 'Current password is incorrect' });
+    }
 
-    // 3) Enforce minimum password age (24h since last change or creation)
     const lastChangedAt = user.password_changed_at || user.created_at;
     if (lastChangedAt) {
       const now = Date.now();
@@ -539,53 +620,61 @@ exports.changePassword = async (req, res) => {
       const msLeft = (last + MS_24H) - now;
       if (msLeft > 0) {
         const hoursLeft = Math.ceil(msLeft / 3600000);
+        await logActivity(user.id, 'change_password_failed (min_age_block)', ip, { hoursLeft });
         return res.status(429).json({ message: `Password was changed recently. Try again in ${hoursLeft} hour(s).` });
       }
     }
 
-    // 4) Block reuse of current password
     if (await bcrypt.compare(newPassword, user.password)) {
+      await logActivity(user.id, 'change_password_failed (reused_current)', ip);
       return res.status(400).json({ message: 'New password must be different from the current password' });
     }
 
-    // 5) Block reuse of last N history hashes
     const { data: history, error: histErr } = await supabase
       .from('user_password_history')
       .select('hash')
       .eq('user_id', user.id)
       .order('changed_at', { ascending: false })
       .limit(PASSWORD_HISTORY_LIMIT);
-    if (histErr) return res.status(500).json({ message: 'Database error (history)' });
+    if (histErr) {
+      await logActivity(user.id, 'change_password_failed (history_read_error)', ip);
+      return res.status(500).json({ message: 'Database error (history)' });
+    }
 
     for (const row of history || []) {
       if (await bcrypt.compare(newPassword, row.hash)) {
+        await logActivity(user.id, 'change_password_failed (reused_recent)', ip);
         return res.status(400).json({ message: 'New password was used recently. Choose a different one.' });
       }
     }
 
-    // 6) Hash new password
     const newHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
 
-    // 7) Rotate: save old hash into history
     const { error: histInsErr } = await supabase
       .from('user_password_history')
       .insert([{ user_id: user.id, username: user.username, hash: user.password }]);
-    if (histInsErr) return res.status(500).json({ message: 'Could not update password history' });
+    if (histInsErr) {
+      await logActivity(user.id, 'change_password_failed (history_insert_error)', ip);
+      return res.status(500).json({ message: 'Could not update password history' });
+    }
 
-    // 8) Update user password + bump password_changed_at
     const { data: updated, error: updErr } = await supabase
       .from('users')
       .update({ password: newHash, password_changed_at: new Date().toISOString() })
       .eq('id', user.id)
       .select('password')
       .single();
-    if (updErr) return res.status(500).json({ message: 'Could not update password' });
+    if (updErr) {
+      await logActivity(user.id, 'change_password_failed (user_update_error)', ip);
+      return res.status(500).json({ message: 'Could not update password' });
+    }
 
-    // 8b) Verify persisted
     const matches = await bcrypt.compare(newPassword, updated.password);
-    if (!matches) return res.status(500).json({ message: 'Password update did not persist' });
+    if (!matches) {
+      await logActivity(user.id, 'change_password_failed (verify_persist_failed)', ip);
+      return res.status(500).json({ message: 'Password update did not persist' });
+    }
 
-    // 9) Trim history to last N
     const { data: allRows } = await supabase
       .from('user_password_history')
       .select('id')
@@ -596,13 +685,16 @@ exports.changePassword = async (req, res) => {
       const extraIds = allRows.slice(PASSWORD_HISTORY_LIMIT).map(r => r.id);
       await supabase.from('user_password_history').delete().in('id', extraIds);
     }
-    await logActivity(user.id, 'Changed password', req.ip);
+
+    await logActivity(user.id, 'change_password_success', ip);
     return res.status(200).json({ message: 'Password changed successfully' });
   } catch (e) {
     console.error('changePassword error:', e);
+    await logActivity(null, 'change_password_failed (server_error)', req.ip);
     return res.status(500).json({ message: 'Internal server error' });
   }
 };
+
 
 
 exports.registerUser = async (req, res) => {
