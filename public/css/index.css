@@ -110,3 +110,79 @@ input[type="submit"] {
     margin-top: 9px;
 }
 
+/* ==== Forgot Password Modal ==== */
+.modal {
+  position: fixed;
+  inset: 0;                 /* top/right/bottom/left: 0 */
+  display: none;            /* shown via JS */
+  background: rgba(0,0,0,.35);
+  z-index: 1000;            /* above .container */
+}
+
+.modal-content {
+  background: var(--three);
+  color: var(--one);
+  width: 360px;
+  max-width: 90%;
+  margin: 10vh auto;        /* vertical spacing + centered */
+  padding: 16px 16px 18px;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.25);
+  border: 1px solid var(--one);
+  box-sizing: border-box;
+}
+
+.close {
+  float: right;
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--one);
+}
+.close:hover { opacity: .7; }
+
+/* Inputs inside modal */
+#emailOrUsername {
+  width: 100%;
+  padding: 10px;
+  border: 2px solid var(--one);
+  border-radius: 6px;
+  background: #fff;
+  color: #000;
+  outline: none;
+}
+#emailOrUsername:focus { box-shadow: 0 0 0 3px rgba(99,102,241,.2); }
+
+/* Modal buttons */
+#forgotSubmit, #forgotCancel {
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: 'Inter';
+}
+
+#forgotText{
+  margin-top: 8px;
+  font-size: 12px;
+  font-family: 'Inter';
+}
+
+#forgotText a{
+  color: inherit;           /* optional: matches surrounding text color */
+  text-decoration: underline;
+}
+
+#forgotText a:hover{
+  text-decoration: none;    /* optional: subtle hover */
+}
+
+
+#forgotSubmit { background: var(--one); color: var(--three); }
+#forgotSubmit[disabled] { opacity: .6; cursor: default; }
+#forgotCancel { background: #e5e7eb; color: #111827; }
+
+/* Link under login */
+#forgotText a { color: var(--one); text-decoration: underline; cursor: pointer; }
+#forgotText a:hover { opacity: .85; }
+

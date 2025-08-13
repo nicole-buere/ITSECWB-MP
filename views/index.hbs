@@ -7,13 +7,13 @@
     <link rel="stylesheet" href="css/sidebar.css">
     <link rel="stylesheet" href="css/sidebar-admin.css">
     <link rel="stylesheet" href="css/colors.css">
-    <script src="/js/login.js"></script>
+    <script src="/js/login.js" defer></script>
     <title>{{title}}</title>
 </head>
 <body>
 
 <link rel="stylesheet" href="css/index.css">
-<script src="js/index.js"></script>
+<script src="js/index.js" defer></script>
 
 <div class="container">
   <div class="indexinfo">
@@ -40,8 +40,35 @@
 
       <input type="submit" value="Login" id="login">
       <p id="registertext">
-        Don't have an account? <a href="/register">Register</a>
-      </p>
+  Don't have an account? <a href="/register">Register</a>
+</p>
+
+<!-- Forgot password link -->
+<p id="forgotText" style="margin-top:8px;">
+  <a href="#" id="forgotPasswordLink">Forgot password?</a>
+</p>
+
+<!-- Modal -->
+<div id="forgotModal" class="modal" style="display:none;">
+  <div class="modal-content">
+    <span id="forgotClose" class="close">&times;</span>
+    <h3 style="margin:0 0 10px 0;">Reset your password</h3>
+    <p style="margin:0 0 12px 0;font-size:14px;">
+      Enter your <strong>email</strong> or <strong>username</strong>. If an account exists, we’ll send a reset link.
+    </p>
+    <input
+      type="text"
+      id="emailOrUsername"
+      placeholder="Email or Username"
+      style="width:100%;padding:10px;box-sizing:border-box;"
+    />
+    <div style="margin-top:12px;display:flex;gap:10px;justify-content:flex-end;">
+      <button type="button" id="forgotCancel">Cancel</button>
+      <button type="button" id="forgotSubmit">Send link</button>
+    </div>
+  </div>
+</div>
+
     </div>
   </form>
 
