@@ -5,8 +5,8 @@ function validatePassword(password, confirmPassword) {
     const hasNumber = /\d/.test(password);
     const hasSpecial = /[@#$%^&+=]/.test(password);
 
-    if (password.length < 8) {
-        alert("Password must be at least 8 characters!");
+    if (password.length < 8 || password.length > 64 ) {
+        alert("Password must be between 8-64 characters!");
         return false;
     }
     if (!hasUpper) {
