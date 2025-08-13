@@ -33,6 +33,16 @@ router.get('/logout',  userController.logoutUser);
 
 router.post('/forgot-password', userController.requestPasswordReset);
 router.post('/reset-password',  userController.resetPassword);
+router.post('/change-password',  userController.changePassword);
 
+// KBA (security questions)
+router.get('/kba/questions', checkRole([], { allowAnonymous: true }), userController.listKbaQuestions);
+router.get('/kba/me',        checkRole(), userController.getMyKbaStatus);
+router.post('/kba/enroll',   checkRole(), userController.enrollKba);
+// Allow anonymous: user is proving possession of the emailed token
+router.get('/kba/question-by-token',
+  checkRole([], { allowAnonymous: true }),
+  userController.getKbaQuestionForToken
+);
 
 module.exports = router;
