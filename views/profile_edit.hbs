@@ -84,28 +84,30 @@
       <button onclick="navigateTo('/edittprofile')" class="profile-button">Edit Profile</button>
       <button class="profile-button" id="changePasswordButton">Change Password</button>
 
-      <!-- Password Change Modal -->
-      <div id="passwordChangeModal" class="modal" style="display: none;">
-        <div class="modal-content">
-          <span class="close" id="closePasswordChangeModal">&times;</span>
+<!-- Password Change Modal -->
+<div id="passwordChangeModal" class="modal" style="display: none;">
+  <div class="modal-content">
+    <span class="close" id="closePasswordChangeModal">&times;</span>
 
-          <div class="input-container">
-            <input type="password" id="currentPasswordInput" placeholder="Current password" autocomplete="current-password">
-          </div>
-          <div class="input-container">
-            <input type="password" id="newPasswordInput" placeholder="Enter new password" autocomplete="new-password">
-          </div>
-          <div class="input-container">
-            <input type="password" id="confirmNewPasswordInput" placeholder="Re-enter new password" autocomplete="new-password">
-          </div>
-
-          <div class="button-container">
-  <button id="confirmPasswordChangeButton" type="button">Confirm</button>
-  <button id="cancelPasswordChangeButton" type="button">Cancel</button>
-</div>
-
+        <div class="input-container password-wrapper">
+        <input type="password" id="currentPasswordInput" placeholder="Current password" autocomplete="current-password">
         </div>
-      </div>
+
+        <div class="input-container password-wrapper">
+        <input type="password" id="newPasswordInput" placeholder="Enter new password" autocomplete="new-password">
+        </div>
+
+        <div class="input-container password-wrapper">
+        <input type="password" id="confirmNewPasswordInput" placeholder="Re-enter new password" autocomplete="new-password">
+        </div>
+
+
+    <div class="button-container">
+      <button id="confirmPasswordChangeButton" type="button">Confirm</button>
+      <button id="cancelPasswordChangeButton"  type="button">Cancel</button>
+    </div>
+  </div>
+</div>
 
       <!-- Logout now has an id so JS can call /api/users/logout -->
       <button class="profile-button" id="logoutButton">Logout</button>
