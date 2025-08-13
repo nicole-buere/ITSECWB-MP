@@ -1,0 +1,19 @@
+<!-- filepath: c:\Git Projects\ITSECWB-MP\views\admin_logs.hbs -->
+<h1>{{title}}</h1>
+
+<div>
+    <label for="filterType">Type:</label>
+    <select id="filterType">
+        <option value="">All</option>
+        <option value="ACCESS DENIED">Access Denied</option>
+    </select>
+    <label for="filterDate">Date:</label>
+    <input type="date" id="filterDate">
+    <label for="filterUser">User:</label>
+    <input type="text" id="filterUser" placeholder="Username">
+    <button id="applyFilters">Apply Filters</button>
+</div>
+
+<pre id="logViewer" style="background:#f4f4f4; padding:1em; border:1px solid #ccc; max-height:500px; overflow:auto;">{{logs}}</pre>
+
+<script src="/js/admin_logs.js"></script>
