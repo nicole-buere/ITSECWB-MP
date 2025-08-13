@@ -36,7 +36,7 @@ exports.registerUser = async (req, res) => {
             email,
             username,
             password: hash,
-            role,
+            role: role || 'student',
             description: '',
             profilePicture: 'https://www.redditstatic.com/avatars/avatar_default_02_4856A3.png',
             reservations: [],

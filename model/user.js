@@ -6,7 +6,7 @@ const userSchema = new Schema({
     email: { type: String, required: true, unique: true },
     username: String,
     password: String, // Store securely hashed passwords (use a strong hashing algorithm like bcrypt)
-    role: { type: String, enum: ['student', 'admin'] }, // Limit role options to prevent invalid data
+    role: { type: String, enum: ['student', 'admin'], default: 'student'}, // Limit role options to prevent invalid data
     description: String,
     profilePicture: String,
     reservations: [ // Corrected: Add comma after closing curly brace
