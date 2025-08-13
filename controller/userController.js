@@ -136,7 +136,24 @@ exports.registerUser = async (req, res) => {
             return;
         }
 
-        // Check if 'Password' and 'Confirm Password' fields match
+        // Checks if password meets character requirements
+        if (!/[A-Z]/.test(password)) {
+            res.status(400).json({ message: "Password must have at least 1 uppercase character!" });
+        }
+
+        if (!/[a-z]/.test(password)) {
+            res.status(400).json({ message: "Password must have at least 1 lowercase character" });
+        }
+
+        if (!/\d/.test(password)) {
+            res.status(400).json({ message: "Password must have at least 1 numerical character!" });
+        }
+
+        if (!/[@#$%^&+=]/.test(password)) {
+            res.status(400).json({ message: "Password must have at least 1 special character!" });
+        }
+
+        // Checks if 'Password' and 'Confirm Password' fields match
         if (password !== confirmPassword) {
             res.status(400).json({ message: "Passwords do not match!" });
             return;
@@ -243,9 +260,6 @@ exports.getUser = async (req, res) => {
         res.status(500).json({ message: e.message });
     }
 };
-
-
-
 
 exports.editDescription = async (req, res) => {
     try {
