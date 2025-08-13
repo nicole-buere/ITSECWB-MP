@@ -1,117 +1,117 @@
-{{!-- this is editproile.hbs ver--}}
+{{!-- this is editprofile.hbs ver --}}
 
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width">
-    <link rel="stylesheet" href="css/sidebar.css">
-    <link rel="stylesheet" href="css/sidebar-admin.css">
-    <link rel="stylesheet" href="css/colors.css">
-    <script src="js/profilefeatures.js"></script>
-    <title>{{title}}</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width">
+  <link rel="stylesheet" href="css/sidebar.css">
+  <link rel="stylesheet" href="css/sidebar-admin.css">
+  <link rel="stylesheet" href="css/colors.css">
+  <link rel="stylesheet" href="css/editprofile.css">
+  <script src="js/profilefeatures.js" defer></script>
+  <title>{{title}}</title>
 </head>
 
-<aside class="Sidebar">
+<body>
+  <aside class="Sidebar">
     <div class="image-container">
-      <img src="assets/jeongwoo.jpg" alt="userpfp" id="userpfp">
-      <br>
-      <br>
+      <img src="{{#if user.profilePicture}}{{user.profilePicture}}{{else}}assets/jeongwoo.jpg{{/if}}" alt="userpfp" id="userpfp">
+      <br><br>
     </div>
-  
+
     <ul class="sidebar-links">
-      <li>
-        <br><br>
-        <a href="/home">Reserve</a>
-      </li>
-      <li>
-        <br><br>
-        <a href="/reserve">My Reservations</a>
-      </li>
-      <li>
-        <br><br>
-        <a href="/profile" id="profile">My Profile</a>
-      </li>
+      <li><br><br><a href="/home">Reserve</a></li>
+      <li><br><br><a href="/reserve">My Reservations</a></li>
+      <li><br><br><a href="/profile" id="profile">My Profile</a></li>
     </ul>
   </aside>
 
-<link rel="stylesheet" href="css/editprofile.css">
-
-<div class="notSidebar">
-
+  <div class="notSidebar">
     <div class="greeting-profile">
-        <h2> User Profile </h2>
+      <h2>User Profile</h2>
     </div>
 
     <div class="info">
-        <h3> Name: {{ user.name }} </h3>
-        <h3> Description: </h3>
+      <h3>
+        Name:
+        {{#if user.first_name}}
+          {{user.first_name}} {{user.last_name}}
+        {{else}}
+          {{#if user.name}}{{user.name}}{{else}}{{user.username}}{{/if}}
+        {{/if}}
+      </h3>
 
-        <!-- Display the description -->
-        <input type="text" id="descriptionInput" name="description" value="{{ user.description }}" readonly>
-        
-        <h3><a href="/reserve">Current Reservations: </a></h3>
-            
-        <!-- List view box for current reservations -->
+      <h3>Description:</h3>
+      <input type="text" id="descriptionInput" name="description" value="{{ user.description }}" readonly>
 
-        <div class="current-reservations">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Lab</th>
-                        <th>Seat</th>
-                        <th>Date</th>
-                        <th>Start Time</th>
-                        <th>End Time</th>
-                        <th>Reservation Name</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {{#each Reservation}}
-                        <tr>
-                            <td>{{#if lab_id}}{{ lab_id }}{{else}}N/A{{/if}}</td>
-                            <td>{{#if seatNumber}}{{ seatNumber }}{{else}}N/A{{/if}}</td>
-                            <td>{{#if date}}{{ date }}{{else}}N/A{{/if}}</td>
-                            <td>{{#if start_time}}{{ start_time }}{{else}}N/A{{/if}}</td>
-                            <!-- Calculate End Time based on Start Time and Duration -->
-                            <td>{{#if end_time}}{{ end_time }}{{else}}N/A{{/if}}</td>
-                            <td>
-                                {{#if anonymous}}Anonymous{{else}}{{ reserved_by }}{{/if}}
-                            </td>
-                        </tr>
-                    {{/each}}
-                </tbody>
-            </table>  
-        </div>
+      <h3><a href="/reserve">Current Reservations:</a></h3>
 
+      <div class="current-reservations">
+        <table>
+          <thead>
+            <tr>
+              <th>Lab</th>
+              <th>Seat</th>
+              <th>Date</th>
+              <th>Start Time</th>
+              <th>End Time</th>
+              <th>Reservation Name</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{#each Reservation}}
+              <tr>
+                <td>{{#if lab_id}}{{lab_id}}{{else}}N/A{{/if}}</td>
+                <td>{{#if seatNumber}}{{seatNumber}}{{else}}N/A{{/if}}</td>
+                <td>{{#if date}}{{date}}{{else}}N/A{{/if}}</td>
+                <td>{{#if start_time}}{{start_time}}{{else}}N/A{{/if}}</td>
+                <td>{{#if end_time}}{{end_time}}{{else}}N/A{{/if}}</td>
+                <td>{{#if anonymous}}Anonymous{{else}}{{reserved_by}}{{/if}}</td>
+              </tr>
+            {{/each}}
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <div class="image-container-profile">
-        <img src="{{ user.pictureURL }}" alt="userpfp" id="userpfp"> <br> <br>
+      <img src="{{#if user.profilePicture}}{{user.profilePicture}}{{else}}assets/jeongwoo.jpg{{/if}}" alt="userpfp" id="userpfp">
+      <br><br>
     </div>
 
     <div class="profile-buttons">
-        <button onclick="navigateTo('/edittprofile')" class="profile-button">Edit Profile</button>
-        <button class="profile-button" id="changePasswordButton">Change Password</button>
+      <button onclick="navigateTo('/edittprofile')" class="profile-button">Edit Profile</button>
+      <button class="profile-button" id="changePasswordButton">Change Password</button>
 
-        <div id="passwordChangeModal" class="modal" style="display: none;">
-            <div class="modal-content">
-                <span class="close" id="closePasswordChangeModal">&times;</span>
-                <div class="input-container">
-                    <input type="password" id="newPasswordInput" placeholder="Enter new password">
-                </div>
-                <div class="input-container">
-                    <input type="password" id="confirmNewPasswordInput" placeholder="Re-enter new password">
-                </div>
-                <div class="button-container">
-                    <button id="confirmPasswordChangeButton">Confirm</button>
-                    <button id="cancelPasswordChangeButton">Cancel</button>
-                </div>
-            </div>
-        </div>
-        
-        <button onclick="navigateTo('/')" class="profile-button">Logout</button>
-        <button class="profile-button red-text" id="deleteAccountButton">Delete Account</button>
-    </div>
-       
+      <!-- Password Change Modal -->
+      <div id="passwordChangeModal" class="modal" style="display: none;">
+        <div class="modal-content">
+          <span class="close" id="closePasswordChangeModal">&times;</span>
+
+          <div class="input-container">
+            <input type="password" id="currentPasswordInput" placeholder="Current password" autocomplete="current-password">
+          </div>
+          <div class="input-container">
+            <input type="password" id="newPasswordInput" placeholder="Enter new password" autocomplete="new-password">
+          </div>
+          <div class="input-container">
+            <input type="password" id="confirmNewPasswordInput" placeholder="Re-enter new password" autocomplete="new-password">
+          </div>
+
+          <div class="button-container">
+  <button id="confirmPasswordChangeButton" type="button">Confirm</button>
+  <button id="cancelPasswordChangeButton" type="button">Cancel</button>
 </div>
+
+        </div>
+      </div>
+
+      <!-- Logout now has an id so JS can call /api/users/logout -->
+      <button class="profile-button" id="logoutButton">Logout</button>
+
+      <button class="profile-button red-text" id="deleteAccountButton">Delete Account</button>
+    </div>
+  </div>
+</body>
+</html>

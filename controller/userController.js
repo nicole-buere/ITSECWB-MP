@@ -1,6 +1,109 @@
 const { supabase } = require('../model/database');
 const bcrypt = require("bcrypt");
 
+const PASSWORD_HISTORY_LIMIT = 3; // block reuse of the last N passwords
+const BCRYPT_ROUNDS = 12;
+const MS_24H = 24 * 60 * 60 * 1000; // 24h in ms
+
+exports.changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ message: 'Missing fields' });
+    }
+    if (newPassword.length < 8) {
+      return res.status(400).json({ message: 'Password must be at least 8 characters!' });
+    }
+    if (!req.session?.username) {
+      return res.status(401).json({ message: 'Not authenticated' });
+    }
+
+    // 1) Load user (need id, current hash, and timestamps)
+    const { data: user, error: findErr } = await supabase
+      .from('users')
+      .select('id, username, password, password_changed_at, created_at')
+      .eq('username', req.session.username)
+      .single();
+    if (findErr || !user) return res.status(401).json({ message: 'User not found' });
+
+    // 2) Verify current password
+    const ok = await bcrypt.compare(currentPassword, user.password);
+    if (!ok) return res.status(400).json({ message: 'Current password is incorrect' });
+
+    // 3) Enforce minimum password age (24h since last change or creation)
+    const lastChangedAt = user.password_changed_at || user.created_at;
+    if (lastChangedAt) {
+      const now = Date.now();
+      const last = new Date(lastChangedAt).getTime();
+      const msLeft = (last + MS_24H) - now;
+      if (msLeft > 0) {
+        const hoursLeft = Math.ceil(msLeft / 3600000);
+        return res.status(429).json({ message: `Password was changed recently. Try again in ${hoursLeft} hour(s).` });
+      }
+    }
+
+    // 4) Block reuse of current password
+    if (await bcrypt.compare(newPassword, user.password)) {
+      return res.status(400).json({ message: 'New password must be different from the current password' });
+    }
+
+    // 5) Block reuse of last N history hashes
+    const { data: history, error: histErr } = await supabase
+      .from('user_password_history')
+      .select('hash')
+      .eq('user_id', user.id)
+      .order('changed_at', { ascending: false })
+      .limit(PASSWORD_HISTORY_LIMIT);
+    if (histErr) return res.status(500).json({ message: 'Database error (history)' });
+
+    for (const row of history || []) {
+      if (await bcrypt.compare(newPassword, row.hash)) {
+        return res.status(400).json({ message: 'New password was used recently. Choose a different one.' });
+      }
+    }
+
+    // 6) Hash new password
+    const newHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+
+    // 7) Rotate: save old hash into history
+    const { error: histInsErr } = await supabase
+      .from('user_password_history')
+      .insert([{ user_id: user.id, username: user.username, hash: user.password }]);
+    if (histInsErr) return res.status(500).json({ message: 'Could not update password history' });
+
+    // 8) Update user password + bump password_changed_at
+    const { data: updated, error: updErr } = await supabase
+      .from('users')
+      .update({ password: newHash, password_changed_at: new Date().toISOString() })
+      .eq('id', user.id)
+      .select('password')
+      .single();
+    if (updErr) return res.status(500).json({ message: 'Could not update password' });
+
+    // 8b) Verify persisted
+    const matches = await bcrypt.compare(newPassword, updated.password);
+    if (!matches) return res.status(500).json({ message: 'Password update did not persist' });
+
+    // 9) Trim history to last N
+    const { data: allRows } = await supabase
+      .from('user_password_history')
+      .select('id')
+      .eq('user_id', user.id)
+      .order('changed_at', { ascending: false });
+
+    if (allRows && allRows.length > PASSWORD_HISTORY_LIMIT) {
+      const extraIds = allRows.slice(PASSWORD_HISTORY_LIMIT).map(r => r.id);
+      await supabase.from('user_password_history').delete().in('id', extraIds);
+    }
+
+    return res.status(200).json({ message: 'Password changed successfully' });
+  } catch (e) {
+    console.error('changePassword error:', e);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
 
 exports.registerUser = async (req, res) => {
     try {
@@ -102,6 +205,9 @@ exports.loginUser = async (req, res) => {
             req.session = req.session || {};
             req.session.authenticated = true;
             req.session.username = username;
+            // after setting authenticated + username
+            req.session.user = { id: user.id, username: user.username, role: user.role || 'student' };
+
 
             if (user.role === 'admin') {
                 req.session.admin = true;
