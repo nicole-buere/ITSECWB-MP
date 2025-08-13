@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const end_time = rowData.end_time
         const username = rowData.reserved_by
 
-        console.log(lab_id, seatNumber,date, start_time, end_time, username)
+
 
         if (!rowData) {
             alert("Please select a reservation to delete");
@@ -89,12 +89,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (selectedRow) {
             // Retrieve data from the selected row
             return {
-                date: selectedRow.cells[2].textContent,
+                date_of_reservation: selectedRow.cells[2].textContent,
                 start_time: selectedRow.cells[3].textContent,
                 end_time: selectedRow.cells[4].textContent,
-                lab_id: selectedRow.cells[0].textContent,
+                lab_name: selectedRow.cells[0].textContent,
                 reserved_by: selectedRow.cells[5].textContent.trim(),
-                seatNumber: selectedRow.cells[1].textContent,
+                seat_num: selectedRow.cells[1].textContent,
             };
         } else {
             // If no row is selected, return null
@@ -109,8 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Check if a row is selected
         if (rowData) {
-            // Log the data
-            console.log(rowData);
+
 
             // Now you can use rowData for further processing like editing the reservation
         } else {
@@ -134,9 +133,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Retrieve data from the selected row
             const rowData = {
-                lab_id: row.cells[0].textContent,
-                seatNumber: row.cells[1].textContent,
-                date: row.cells[2].textContent,
+                lab_name: row.cells[0].textContent,
+                seat_num: row.cells[1].textContent,
+                date_of_reservation: row.cells[2].textContent,
                 start_time: row.cells[3].textContent,
                 end_time: row.cells[4].textContent,
                 reservationName: row.cells[5].textContent
@@ -154,7 +153,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Check if a row is selected
         if (rowData) {
             // Redirect to the edit reservation page with query parameters
-            window.location.href = `/editReservation/${rowData.lab_id}/${rowData.seatNumber}/${rowData.date}/${rowData.start_time}/${rowData.end_time}/${rowData.reserved_by}`;
+            window.location.href = `/editReservation/${rowData.lab_name}/${rowData.seat_num}/${rowData.date_of_reservation}/${rowData.start_time}/${rowData.end_time}/${rowData.reserved_by}`;
 
         } else {
             alert("Please select a reservation to edit");

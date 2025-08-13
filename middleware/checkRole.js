@@ -1,22 +1,21 @@
-function checkRole(roles = []) {
-    return function (req, res, next) {
-        // Check if logged in
-        if (!req.session || !req.session.user) {
-            return res.status(401).json({ message: 'Not authenticated' });
+const checkRole = (roles = []) => {
+    return (req, res, next) => {
+        if (!req.session.authenticated) {
+            return res.status(401).json({ message: 'Authentication required' });
         }
 
-        // If no roles specified → allow any logged-in user
         if (roles.length === 0) {
             return next();
         }
 
-        // Role check
-        if (!roles.includes(req.session.user.role)) {
-            return res.status(403).json({ message: 'Access denied: insufficient role' });
+        const userRole = req.session.admin ? 'admin' : 'student';
+        
+        if (!roles.includes(userRole)) {
+            return res.status(403).json({ message: 'Insufficient permissions' });
         }
 
         next();
     };
-}
+};
 
 module.exports = checkRole;

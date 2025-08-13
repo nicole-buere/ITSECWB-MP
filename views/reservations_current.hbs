@@ -63,11 +63,10 @@
             <tbody>
                 {{#each Reservation}}
                         <tr>
-                            <td>{{#if lab_id}}{{ lab_id }}{{else}}N/A{{/if}}</td>
-                            <td>{{#if seatNumber}}{{ seatNumber }}{{else}}N/A{{/if}}</td>
-                            <td>{{#if date}}{{ date }}{{else}}N/A{{/if}}</td>
+                            <td>{{#if lab_name}}{{ lab_name }}{{else}}N/A{{/if}}</td>
+                            <td>{{#if seat_num}}{{ seat_num }}{{else}}N/A{{/if}}</td>
+                            <td>{{#if date_of_reservation}}{{ date_of_reservation }}{{else}}N/A{{/if}}</td>
                             <td>{{#if start_time}}{{ start_time }}{{else}}N/A{{/if}}</td>
-                            <!-- Calculate End Time based on Start Time and Duration -->
                             <td>{{#if end_time}}{{ end_time }}{{else}}N/A{{/if}}</td>
                             <td>                                
                                 {{#if anonymous}}Anonymous{{else}}{{ reserved_by }}{{/if}}

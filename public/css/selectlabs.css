@@ -140,3 +140,15 @@
     background-color: var(--two);
 }
 
+/* Link styling to make it look like a button */
+.see-avail-link
+{
+    text-decoration: none;
+    display: inline-block;
+}
+
+.see-avail-link:hover .see-avail
+{
+    background-color: var(--two);
+}
+

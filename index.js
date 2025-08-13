@@ -37,15 +37,17 @@ app.use(
 app.use('/api/users', userRoutes);
 app.use('/api/labs', labroutes);
 
-
-
+// Add logging middleware for API routes
+app.use('/api/labs', (req, res, next) => {
+    next();
+});
 
 
 // For handlebars 
 hbs.registerHelper('getReservationDate', function(reservations, desiredDate, current_time) {
     for (let i = 0; i < reservations.length; i++) {
         const reservation = reservations[i];
-        if (reservation.date === desiredDate) {
+        if (reservation.date_of_reservation === desiredDate) {
             if (current_time >= reservation.start_time && current_time <= reservation.end_time) {
                 return true;
             }
@@ -57,6 +59,26 @@ hbs.registerHelper('getReservationDate', function(reservations, desiredDate, cur
 // Register eq helper for comparing values in templates
 hbs.registerHelper('eq', function(a, b) {
     return a === b;
+});
+
+// Register lte helper for less than or equal comparison
+hbs.registerHelper('lte', function(a, b) {
+    return a <= b;
+});
+
+// Register gt helper for greater than comparison
+hbs.registerHelper('gt', function(a, b) {
+    return a > b;
+});
+
+// Register gte helper for greater than or equal comparison
+hbs.registerHelper('gte', function(a, b) {
+    return a >= b;
+});
+
+// Register and helper for logical AND
+hbs.registerHelper('and', function() {
+    return Array.prototype.slice.call(arguments, 0, -1).every(Boolean);
 });
 
 // Handle GET request to the root route (index page)
@@ -121,10 +143,7 @@ app.get('/profile', async (req, res) => {
                 const { data: Reservation, error: resError } = await supabase
                     .from('reservation')
                     .select('*')
-                    .eq('reserved_by', user.username);
-
-
-                console.log("User Reservations:", Reservation); // Log the reservations to the console
+                    .eq('reserved_by_user_id', user.id);
 
                 res.render('profile_edit', {
                     title: 'Labyrinth - Profile Page', 
@@ -138,10 +157,7 @@ app.get('/profile', async (req, res) => {
                 const { data: Reservation, error: resError } = await supabase
                     .from('reservation')
                     .select('*')
-                    .eq('reserved_by', user.username);
-
-
-                console.log("User Reservations:", Reservation); // Log the reservations to the console
+                    .eq('reserved_by_user_id', user.id);
 
                 res.render('profile_edit', {
                     title: 'Labyrinth - Profile Page', 
@@ -240,9 +256,8 @@ app.get('/reserve', async (req, res) => {
                     const { data: userReservations, error: resError } = await supabase
                         .from('reservation')
                         .select('*')
-                        .eq('reserved_by', user.username);
+                        .eq('reserved_by_user_id', user.id);
                     Reservation = userReservations;
-                    console.log("User Reservations:", Reservation); // Log the reservations to the console
      
                     res.render('reservations_current', {
                         title: 'Labyrinth - Current Reservations Page',
@@ -255,8 +270,6 @@ app.get('/reserve', async (req, res) => {
                         .from('reservation')
                         .select('*');
                     Reservation = allReservations;
-
-                    console.log("User Reservations:", Reservation); // Log the reservations to the console
 
                     res.render('reservations_current', {
                         title: 'Labyrinth - Current Reservations Page',
@@ -310,8 +323,7 @@ app.get('/viewprofile', async (req, res) => {
             const { data: Reservation, error: resError } = await supabase
                 .from('reservation')
                 .select('*')
-                .eq('reserved_by', user.username);
-            console.log("User Reservations:", Reservation); // Log the reservations to the console
+                .eq('reserved_by_user_id', user.id);
 
             res.render('profile_view', {
                 title: 'Labyrinth - View Profile Page',
@@ -331,21 +343,139 @@ app.get('/viewprofile', async (req, res) => {
 
 // Handle GET request to the /reserve route
 
-
-//for viewing commented out const etc.
-
-app.post('/reservation/:labId', async (req, res) => {
+// GET route for displaying the reservation page
+app.get('/reservation/:labName', async (req, res) => {
     if (req.session.authenticated) {
         try {
+            // Find lab by name (A, B, C)
             const { data: lab, error: labError } = await supabase
-                .from('labs')
+                .from('lab')
                 .select('*')
-                .eq('name', req.params.labId)
+                .eq('lab_name', req.params.labName)
                 .single();
 
             if (!lab) {
                 return res.status(404).json({ message: 'Lab not found' });
             }
+
+            // Fetch seats for this lab
+            const { data: seats, error: seatsError } = await supabase
+                .from('lab_seats')
+                .select('*')
+                .eq('lab_ID', lab.id);
+
+            if (seatsError) {
+                console.error('Error fetching seats:', seatsError);
+                return res.status(500).json({ message: 'Error fetching seats' });
+            }
+
+            // Sort seats by seat_num to ensure proper grid layout
+            // This should match the visual layout in the template: 1A, 2A, 3A, ..., 18A
+            const sortedSeats = (seats || []).sort((a, b) => {
+                // Extract numeric part from seat_num (e.g., "1A" -> 1, "10A" -> 10)
+                const aNum = parseInt(a.seat_num.match(/\d+/)[0]);
+                const bNum = parseInt(b.seat_num.match(/\d+/)[0]);
+                
+                // Sort by numeric value only (1, 2, 3, ..., 10, 11, 12, ..., 18)
+                return aNum - bNum;
+            });
+            
+            // Add seats to the lab object
+            lab.seats = sortedSeats;
+            
+            // Check for existing reservations for today
+            const today = new Date().toISOString().split('T')[0];
+            
+            const { data: existingReservations, error: reservationError } = await supabase
+                .from('reservation')
+                .select('seat_ID, date_of_reservation, start_time, end_time')
+                .eq('lab_ID', lab.id)
+                .eq('date_of_reservation', today);
+
+            if (reservationError) {
+                console.error('Error fetching existing reservations:', reservationError);
+            } else {
+                // Mark seats as taken if they have reservations
+                const takenSeatIds = existingReservations.map(r => r.seat_ID);
+                
+                lab.seats = lab.seats.map(seat => {
+                    const isTaken = takenSeatIds.includes(seat.id);
+                    return {
+                        ...seat,
+                        is_taken: isTaken
+                    };
+                });
+            }
+
+
+
+            const currentDate = new Date();
+            const currentDateStr = currentDate.toISOString().split('T')[0];
+            const currentHours = currentDate.getHours().toString().padStart(2, '0');
+            const currentMinutes = currentDate.getMinutes().toString().padStart(2, '0');
+            const currentTime = `${currentHours}:${currentMinutes}`;
+
+            res.render('reserve/reservation', {
+                title: 'Reserve a Seat',
+                username: req.session.username,
+                labId: req.params.labName,
+                lab: lab,
+                currentTime: currentTime,
+                admin_status: req.session.admin
+            });
+
+        } catch (err) {
+            console.error(err);
+            res.status(500).render('error_page', {
+                title: 'Internal Server Error',
+                errorCode: '500',
+                errorTitle: 'Internal Server Error',
+                errorMessage: 'Something went wrong while loading the reservation page.',
+                errorDescription: 'We encountered an issue while loading the reservation page. Please try again later.',
+                showLogin: false
+            });
+        }
+    } else {
+        res.status(401).json({ message: 'Unauthorized' });
+    }
+});
+
+//for viewing commented out const etc.
+
+app.post('/reservation/:labName', async (req, res) => {
+    if (req.session.authenticated) {
+        try {
+            // Find lab by name (A, B, C)
+            const { data: lab, error: labError } = await supabase
+                .from('lab')
+                .select('*')
+                .eq('lab_name', req.params.labName)
+                .single();
+
+            // Fetch seats for this lab
+            const { data: seats, error: seatsError } = await supabase
+                .from('lab_seats')
+                .select('*')
+                .eq('lab_ID', lab.id);
+
+            if (seatsError) {
+                console.error('Error fetching seats:', seatsError);
+                return res.status(500).json({ message: 'Error fetching seats' });
+            }
+
+            // Sort seats by seat_num to ensure proper grid layout
+            // This should match the visual layout in the template: 1A, 2A, 3A, ..., 18A
+            const sortedSeats = (seats || []).sort((a, b) => {
+                // Extract numeric part from seat_num (e.g., "1A" -> 1, "10A" -> 10)
+                const aNum = parseInt(a.seat_num.match(/\d+/)[0]);
+                const bNum = parseInt(b.seat_num.match(/\d+/)[0]);
+                
+                // Sort by numeric value only (1, 2, 3, ..., 10, 11, 12, ..., 18)
+                return aNum - bNum;
+            });
+
+            // Add seats to the lab object
+            lab.seats = sortedSeats;
 
             const currentDate = new Date();
         
@@ -391,7 +521,7 @@ app.post('/reservation/:labId', async (req, res) => {
 
         
 
-            const selectedLab = req.params.labId; // Access lab ID from route parameters
+            const selectedLab = req.params.labName; // Access lab name from route parameters
 
             // Pass the currentDate as date to the template
 
