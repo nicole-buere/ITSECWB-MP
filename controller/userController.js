@@ -868,109 +868,131 @@ exports.registerUser = async (req, res) => {
 };
 
 exports.loginUser = async (req, res) => {
-    try {
-        const { username, password } = req.body;
-        const ipAddress = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+  try {
+    const { username, password } = req.body;
 
-        // Find user in Supabase
-        const { data: user, error: findError } = await supabase
-            .from('users')
-            .select('*')
-            .eq('username', username)
-            .single();
-        
-        if (findError || !user) {
-            console.error("Error finding user:", findError);
-            await logLoginAttempt(username, ipAddress, false);
-            
-            // Log validation failure for invalid username
-            try {
-                console.log('Logging login validation failure for invalid username:', username);
-                const logResult = await logValidationFailure(
-                    supabase,
-                    null, // No user ID since user doesn't exist
-                    username,
-                    'login_username',
-                    username,
-                    'Invalid username - user not found'
-                );
-                
-                if (logResult.success) {
-                    console.log('✅ Login validation failure logged successfully');
-                } else {
-                    console.log('❌ Failed to log login validation failure:', logResult.error);
-                }
-            } catch (loggingError) {
-                console.error('Exception during login validation failure logging:', loggingError);
-            }
-            
-            return res.status(401).json({ message: "Invalid credentials!" });
-        }
+    // best-effort client IP
+    const xfwd = (req.headers['x-forwarded-for'] || '').toString();
+    const ipAddress = xfwd ? xfwd.split(',')[0].trim()
+                           : (req.connection?.remoteAddress || req.ip || '');
 
-        // Retrive row of corresponding username attempting to login
-        const { data: log } = await supabase
-            .from('login_attempts_logs')
-            .select('*')
-            .eq('username', username)
-            .single();
-        
-        // Displays lockout timer
-        if (log && log.lockedUntil && new Date(log.lockedUntil) > new Date()) {
-            return res.status(403).json({
-                message: `Account temporarily locked. Try again after ${new Date(log.lockedUntil).toLocaleTimeString()}`
-            });
-        }
+    // Find user (need last_login_at for "previous successful login")
+    const { data: user, error: findError } = await supabase
+      .from('users')
+      .select('id, username, password, role, last_login_at')
+      .eq('username', username)
+      .single();
 
+    if (findError || !user) {
+      // attempt log
+      await logLoginAttempt(username, ipAddress, false);
 
+      // optional validation log
+      try {
+        const logResult = await logValidationFailure(
+          supabase,
+          null,                // no user id
+          username,
+          'login_username',
+          username,
+          'Invalid username - user not found'
+        );
+        if (!logResult?.success) console.log('login validation log failed:', logResult?.error);
+      } catch (err) {
+        console.error('login validation logging error:', err);
+      }
 
-        const isPasswordValid = await bcrypt.compare(password, user.password);
-
-        if (isPasswordValid) {
-            // Create or update the session
-            req.session = req.session || {};
-            req.session.authenticated = true;
-            req.session.username = username;
-
-            await logLoginAttempt(username, ipAddress, true);
-            // after setting authenticated + username
-            req.session.user = { id: user.id, username: user.username, role: user.role || 'student' };
-
-
-            if (user.role === 'admin') {
-                req.session.admin = true;
-            }
-            return res.status(200).json(req.session);
-        } else {
-            await logLoginAttempt(username, ipAddress, false);
-            
-            // Log validation failure for invalid password
-            try {
-                console.log('Logging login validation failure for invalid password for user:', username);
-                const logResult = await logValidationFailure(
-                    supabase,
-                    user.id, // We have the user ID since user exists
-                    username,
-                    'login_password',
-                    '[PASSWORD_HIDDEN]', // Don't log actual password
-                    'Invalid password - password does not match'
-                );
-                
-                if (logResult.success) {
-                    console.log('✅ Login password validation failure logged successfully');
-                } else {
-                    console.log('❌ Failed to log login password validation failure:', logResult.error);
-                }
-            } catch (loggingError) {
-                console.error('Exception during login password validation failure logging:', loggingError);
-            }
-            
-            return res.status(401).json({ message: "Invalid Username/Password" });
-        }
-    } catch (e) {
-        console.error(e);
-        return res.status(500).json({ message: "Internal server error" });
+      return res.status(401).json({ message: 'Invalid credentials!' });
     }
+
+    // Read current login_attempts_logs row ONCE
+    //   - use it to check lockout
+    //   - and to capture the "previous attempt" to show after a success
+    let priorAttempt = null;
+    let lockedUntil = null;
+    {
+      const { data: row } = await supabase
+        .from('login_attempts_logs')
+        .select('attemptedAt, status, ip_address, lockedUntil')
+        .eq('username', username)
+        .single();
+
+      if (row) {
+        priorAttempt = {
+          attemptedAt: row.attemptedAt,
+          status: row.status,
+          ip_address: row.ip_address
+        };
+        lockedUntil = row.lockedUntil;
+      }
+    }
+
+    // Lockout gate
+    if (lockedUntil && new Date(lockedUntil) > new Date()) {
+      return res.status(403).json({
+        message: `Account temporarily locked. Try again after ${new Date(lockedUntil).toLocaleTimeString()}`
+      });
+    }
+
+    // Password check
+    const ok = await bcrypt.compare(password, user.password);
+    if (!ok) {
+      await logLoginAttempt(username, ipAddress, false);
+
+      // optional validation log
+      try {
+        const logResult = await logValidationFailure(
+          supabase,
+          user.id,
+          username,
+          'login_password',
+          '[PASSWORD_HIDDEN]',
+          'Invalid password - password does not match'
+        );
+        if (!logResult?.success) console.log('login password validation log failed:', logResult?.error);
+      } catch (err) {
+        console.error('login password validation logging error:', err);
+      }
+
+      return res.status(401).json({ message: 'Invalid Username/Password' });
+    }
+
+    // Success — log success (this will overwrite the row, so we captured priorAttempt above)
+    await logLoginAttempt(username, ipAddress, true);
+
+    // Previous successful login BEFORE we update it
+    const previousLastLogin = user.last_login_at || null;
+
+    // Update last successful login to "now"
+    const { error: updErr } = await supabase
+      .from('users')
+      .update({ last_login_at: new Date().toISOString() })
+      .eq('id', user.id);
+    if (updErr) console.error('Failed to update last_login_at:', updErr);
+
+    // Build session
+    req.session = req.session || {};
+    req.session.authenticated = true;
+    req.session.username = username;
+    req.session.user = { id: user.id, username: user.username, role: user.role || 'student' };
+    if (user.role === 'admin') req.session.admin = true;
+
+    // Expose to UI
+    req.session.lastLoginAt = previousLastLogin; // previous *successful* login
+    req.session.lastAuthAttempt = priorAttempt;  // attempt before this success (may be fail or success)
+
+    return res.status(200).json({
+      ...req.session,
+      lastLoginAt: previousLastLogin,
+      lastAuthAttempt: priorAttempt
+    });
+
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
 };
+
 
 
 
@@ -1075,3 +1097,20 @@ exports.logoutUser = async (req, res) => {
     }
 }
 
+async function getLastTwoLoginAttemptsForUser(userId) {
+  const { data, error } = await supabase
+    .from('login_attempts_logs')
+    .select('attemptedAt, status, ip_address')
+    .eq('userID', userId)                         // <-- use UUID column
+    .order('attemptedAt', { ascending: false })   // newest first
+    .limit(2);
+
+  if (error) {
+    console.error('getLastTwoLoginAttemptsForUser error:', error);
+    return { last: null, previous: null };
+  }
+  return {
+    last: data?.[0] || null,       // most recent attempt
+    previous: data?.[1] || null,   // attempt before that
+  };
+}

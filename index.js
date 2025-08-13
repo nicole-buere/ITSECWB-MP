@@ -106,26 +106,29 @@ app.get('/register', (req, res) => {
 
 // Handle post request to the /home route
 // Update your /home route handler
+// routes/pages.js (or wherever you render /home)
 app.get('/home', (req, res) => {
-    if (req.session.authenticated) {
-        res.render('homepage', {
-  title: 'Labyrinth - Home Page',
-  username: req.session.username,
-  isStudent: req.session.user?.role === 'student',
-  lastLoginAt: req.session.user?.lastLoginAt || null,
+  if (req.session?.authenticated) {
+    const role = req.session.user?.role || 'student';
+    return res.render('homepage', {
+      title: 'Home',
+      username: req.session.username,
+      isStudent: role !== 'admin',
+      lastLoginAt: req.session.lastLoginAt || null,
+      lastAuthAttempt: req.session.lastAuthAttempt || null,
+    });
+  }
+
+  res.status(401).render('error_page', {
+    title: 'Unauthorized Access',
+    errorCode: '401',
+    errorTitle: 'Unauthorized Access',
+    errorMessage: 'You need to log in to access this page.',
+    errorDescription: 'This page requires authentication. Please log in with your account credentials.',
+    showLogin: true,
+  });
 });
 
-    } else {
-        res.status(401).render('error_page', {
-            title: 'Unauthorized Access',
-            errorCode: '401',
-            errorTitle: 'Unauthorized Access',
-            errorMessage: 'You need to log in to access this page.',
-            errorDescription: 'This page requires authentication. Please log in with your account credentials.',
-            showLogin: true
-        });
-    }
-});
 
 
 // Handle GET request to the /profile route
