@@ -45,7 +45,34 @@
       <h3>Description:</h3>
       <input type="text" id="descriptionInput" name="description" value="{{ user.description }}" readonly>
 
-      <h3><a href="/reserve">Current Reservations:</a></h3>
+        <div class="current-reservations">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Lab</th>
+                        <th>Seat</th>
+                        <th>Date</th>
+                        <th>Start Time</th>
+                        <th>End Time</th>
+                        <th>Reservation Name</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{#each Reservation}}
+                        <tr>
+                            <td>{{#if lab_name}}{{ lab_name }}{{else}}N/A{{/if}}</td>
+                            <td>{{#if seat_num}}{{ seat_num }}{{else}}N/A{{/if}}</td>
+                            <td>{{#if date_of_reservation}}{{ date_of_reservation }}{{else}}N/A{{/if}}</td>
+                            <td>{{#if start_time}}{{ start_time }}{{else}}N/A{{/if}}</td>
+                            <td>{{#if end_time}}{{ end_time }}{{else}}N/A{{/if}}</td>
+                            <td>
+                                {{#if anonymous}}Anonymous{{else}}{{ reserved_by }}{{/if}}
+                            </td>
+                        </tr>
+                    {{/each}}
+                </tbody>
+            </table>  
+        </div>
 
       <div class="current-reservations">
         <table>

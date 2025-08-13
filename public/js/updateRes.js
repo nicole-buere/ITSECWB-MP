@@ -13,7 +13,7 @@ function getUrlParams() {
     const endTime = pathSegments[5];
     const reservedBy = pathSegments[6];
 
-    console.log({ labId, seatNumber, date, startTime, endTime, reservedBy })
+
 
     return { labId, seatNumber, date, startTime, endTime, reservedBy };
 }
@@ -88,10 +88,7 @@ update.addEventListener('click', async (e) => {
 
     const { labId, seatNumber, date, startTime, endTime, reservedBy } = getUrlParams();
 
-    // Debug: Log the retrieved values
-    console.log("New Date:", newdate);
-    console.log("New Start Time:", newstartTime);
-    console.log("New End Time:", newendTime);
+
 
     const response = await fetch('/api/labs/updateProfile', {
         method: 'PUT',

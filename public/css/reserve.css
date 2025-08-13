@@ -27,6 +27,10 @@
     font-family: 'Inter';
 }
 
+
+
+
+
 /* contains all, time and date drop down, seats, legends */
 .elements-container{
     border: solid;
@@ -58,14 +62,7 @@
     flex-direction: column;
 }
 
-.anon-checkbox{
-    font-size: 14px;
-    font-family: 'Inter';
-    margin-top: 20px;
-    width: 200px;
-    display: flex;
-    flex-direction: row;
-}
+
 
 #reserve-button {
     cursor: pointer;
@@ -79,13 +76,47 @@
     text-align: center; 
     width:85px;
     margin-top: 50px; 
-   
+    transition: all 0.3s ease;
+}
+
+#reserve-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+    background-color: #ccc;
 }
 
 /* background color changes on hover */
-#reserve-button:hover {
+#reserve-button:hover:not(:disabled) {
     background-color: var(--two); 
 }
+
+.check-availability-button {
+    cursor: pointer;
+    background-color: var(--two);
+    color: var(--three);
+    border: none;
+    border-radius: 5px; 
+    font-size: 16px;
+    padding: 6px 12px;
+    display: inline-block;
+    text-align: center;
+    width: 150px;
+    margin-top: 20px;
+    margin-bottom: 10px;
+    transition: all 0.3s ease;
+}
+
+.check-availability-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+    background-color: #ccc;
+}
+
+.check-availability-button:not(:disabled):hover {
+    background-color: var(--one);
+}
+
+
 
 .legend{
     display: flex;

@@ -200,9 +200,7 @@ exports.registerUser = async (req, res) => {
     try {
         const { name, email, username, password, confirmPassword, role } = req.body;
 
-        // Debugging
-        console.log("password ", password);
-        console.log("confirmPassword", confirmPassword);
+
 
         // Check if the username already exists
         const { data: existingUser, error: findError } = await supabase
@@ -314,9 +312,7 @@ exports.loginUser = async (req, res) => {
             });
         }
 
-        // Debugging 
-        console.log ("Inputted Password: ", password)
-        console.log ("Stored Password: ", user.password)
+
 
         const isPasswordValid = await bcrypt.compare(password, user.password);
 

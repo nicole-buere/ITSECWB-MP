@@ -75,11 +75,14 @@
 
         <div class="greeting">
             {{!-- change the handlebar to the actual chosen lab --}}
-            <h1 id="lab-name"> Laboratory <span id="lab_id">{{lab.name}}</span></h1>
+            <h1 id="lab-name"> Laboratory <span id="lab_id">{{lab.lab_name}}</span></h1>
+            <input type="hidden" id="lab_database_id" value="{{lab.lab_name}}">
+
             <h2 id="usernameid"> Hello, {{username}} </h2>
         </div>
 
         <div class="instruction"> <h3>Please select your preferred schedule and seat</h3></div>
+
 
         
         <div class="elements-container">
@@ -94,26 +97,18 @@
             </div>
             {{/if}}
             
-                <form class="reserve-form" action="/reservation/{{lab.name}}" method="post">
+                <form class="reserve-form" action="/reservation/{{lab.lab_name}}" method="post">
+                    <input type="hidden" id="selected-seat" name="selected-seat" value="">
                     <div class="date-time">
                         <label for="datesLabel">Choose a date: </label>
                         <select id="dates" name="dates">
-                            {{#if date}}
-                                <option value="{{ date }}" selected>{{ date }}</option>
-                            {{else}}
-                                {{#each dateOptions}}
-                                    <option value="{{ this }}">{{ this }}</option>
-                                {{/each}}
-                            {{/if}}
+                            <!-- Date options will be populated by JavaScript -->
                         </select>
                         <br>
                         <label for="start_times">Choose a start time: </label>
                         <select id="start_time" name="start_time">
                             {{#if start_time}}
                                 <option value="{{ start_time }}" selected>{{ start_time }}</option>
-                            {{else}}
-                                <option value="00:00">00:00</option> <!-- Default value -->
-                                <!-- Add other options as needed -->
                             {{/if}}
                         </select>
                         <br>
@@ -121,18 +116,10 @@
                         <select id="end_time" name="end_time">
                             {{#if end_time}}
                                 <option value="{{ end_time }}" selected>{{ end_time }}</option>
-                            {{else}}
-                                <option value="00:00">00:00</option> <!-- Default value -->
-                                <!-- Add other options as needed -->
                             {{/if}}
                         </select>
 
-                        <div class="anon-checkbox">
-                            <input type="checkbox" id="anon-checkbox" name="anon-checkbox" value="anonymous">
-                            <label for="anon">Reserve Anonymously</label>   
-                        </div>
-
-                        <input type="submit" name="submit-button" id="check_availability" value="Check Availability"/> 
+                        <button type="button" id="check_availability" class="check-availability-button">Check Availability</button>
 
                         <button id="reserve-button" class="reserve-button" type="button">Reserve</button>
                     </div>
@@ -160,25 +147,87 @@
                         </div>
                      </div>
                 </div>
-        <div class="seats-container">
-            <div class="container-a">
-                <div class="seat-area">
-                  {{#each lab.seats}}
-                    <div class="seat-container">
-                        {{#if (getReservationDate this.reservations ../date ../currentTime)}}
-                            <!-- Seat is reserved for the desired date -->
-                            <div class="reserved-seat">
-                                <img id="{{this.seatNumber}}" class="seat" src="/assets/taken.png" alt="Reserved Seat" onclick="toggleSeatStatus('{{this.seatNumber}}')">
-                            </div>
-                        {{else}}
-                            <!-- Seat is available for the desired date -->
-                            <img id="{{this.seatNumber}}" class="seat" src="/assets/available.png" alt="Available Seat" onclick="toggleSeatStatus('{{this.seatNumber}}')">
-                        {{/if}}
-                    </div>
-                {{/each}}
-                </div>
-            </div>
-        </div>
+                 <div class="seats-container">
+             <!-- 
+             Seat Layout: The seats array should be ordered as: 1A, 2A, 3A, 4A, 5A, 6A, 7A, 8A, 9A, 10A, 11A, 12A, 13A, 14A, 15A, 16A, 17A, 18A
+             Left Column: Seats 1A-9A in 3 rows (indices 0-8)
+             Right Column: Seats 10A-18A in 3 rows (indices 9-17)
+             -->
+             <div class="container-left">
+                 <div class="seat-area">
+                     <!-- Row 1: Seats 1A, 2A, 3A -->
+                     <div class="seat-row">
+                         {{#each lab.seats}}
+                             {{#if (and (gte @index 0) (lte @index 2))}}
+                             <div class="seat-container">
+                                 <img id="{{this.id}}" class="seat" src="{{#if this.is_taken}}/assets/taken.png{{else}}/assets/available.png{{/if}}" alt="{{#if this.is_taken}}Taken Seat{{else}}Available Seat{{/if}}" onclick="{{#unless this.is_taken}}toggleSeatStatus('{{this.id}}'){{/unless}}" data-seat-num="{{this.seat_num}}">
+                             </div>
+                             {{/if}}
+                         {{/each}}
+                     </div>
+                     
+                     <!-- Row 2: Seats 4A, 5A, 6A -->
+                     <div class="seat-row">
+                         {{#each lab.seats}}
+                             {{#if (and (gte @index 3) (lte @index 5))}}
+                             <div class="seat-container">
+                                 <img id="{{this.id}}" class="seat" src="{{#if this.is_taken}}/assets/taken.png{{else}}/assets/available.png{{/if}}" alt="{{#if this.is_taken}}Taken Seat{{else}}Available Seat{{/if}}" onclick="{{#unless this.is_taken}}toggleSeatStatus('{{this.id}}'){{/unless}}" data-seat-num="{{this.seat_num}}">
+                             </div>
+                             {{/if}}
+                         {{/each}}
+                     </div>
+                     
+                     <!-- Row 3: Seats 7A, 8A, 9A -->
+                     <div class="seat-row">
+                         {{#each lab.seats}}
+                             {{#if (and (gte @index 6) (lte @index 8))}}
+                             <div class="seat-container">
+                                 <img id="{{this.id}}" class="seat" src="{{#if this.is_taken}}/assets/taken.png{{else}}/assets/available.png{{/if}}" alt="{{#if this.is_taken}}Taken Seat{{else}}Available Seat{{/if}}" onclick="{{#unless this.is_taken}}toggleSeatStatus('{{this.id}}'){{/unless}}" data-seat-num="{{this.seat_num}}">
+                             </div>
+                             {{/if}}
+                         {{/each}}
+                     </div>
+                 </div>
+             </div>
+             
+             <!-- Right Column: Seats 10A-18A in 3 rows -->
+             <div class="container-right">
+                 <div class="seat-area">
+                     <!-- Row 1: Seats 10A, 11A, 12A -->
+                     <div class="seat-row">
+                         {{#each lab.seats}}
+                             {{#if (and (gte @index 9) (lte @index 11))}}
+                             <div class="seat-container">
+                                 <img id="{{this.id}}" class="seat" src="{{#if this.is_taken}}/assets/taken.png{{else}}/assets/available.png{{/if}}" alt="{{#if this.is_taken}}Taken Seat{{else}}Available Seat{{/if}}" onclick="{{#unless this.is_taken}}toggleSeatStatus('{{this.id}}'){{/unless}}" data-seat-num="{{this.seat_num}}">
+                             </div>
+                             {{/if}}
+                         {{/each}}
+                     </div>
+                     
+                     <!-- Row 2: Seats 13A, 14A, 15A -->
+                     <div class="seat-row">
+                         {{#each lab.seats}}
+                             {{#if (and (gte @index 12) (lte @index 14))}}
+                             <div class="seat-container">
+                                 <img id="{{this.id}}" class="seat" src="{{#if this.is_taken}}/assets/taken.png{{else}}/assets/available.png{{/if}}" alt="{{#if this.is_taken}}Taken Seat{{else}}Available Seat{{/if}}" onclick="{{#unless this.is_taken}}toggleSeatStatus('{{this.id}}'){{/unless}}" data-seat-num="{{this.seat_num}}">
+                             </div>
+                             {{/if}}
+                         {{/each}}
+                     </div>
+                     
+                     <!-- Row 3: Seats 16A, 17A, 18A -->
+                     <div class="seat-row">
+                         {{#each lab.seats}}
+                             {{#if (and (gte @index 15) (lte @index 17))}}
+                             <div class="seat-container">
+                                 <img id="{{this.id}}" class="seat" src="{{#if this.is_taken}}/assets/taken.png{{else}}/assets/available.png{{/if}}" alt="{{#if this.is_taken}}Taken Seat{{else}}Available Seat{{/if}}" onclick="{{#unless this.is_taken}}toggleSeatStatus('{{this.id}}'){{/unless}}" data-seat-num="{{this.seat_num}}">
+                             </div>
+                             {{/if}}
+                         {{/each}}
+                     </div>
+                 </div>
+             </div>
+         </div>
 
             </div>
             </div> {{!-- end of right panel div --}}

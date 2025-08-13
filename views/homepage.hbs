@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="css/sidebar.css">
     <link rel="stylesheet" href="css/sidebar-admin.css">
     <link rel="stylesheet" href="css/colors.css">
-    <script src="js/labSelection.js"></script>
+    <!-- Removed labSelection.js - now using proper links -->
     <script src="js/user_handler.js"></script>
     <title>{{title}}</title>
 </head>
@@ -106,10 +106,10 @@
                 capacity: 18 seats <br>
                 location: 2nd floor
             </div>
-            <!-- when clicked redirected to reservation of seats page (can change /reservation) -->
-            <form action="/reservation/A" method="post">
-                <input type="submit" value="See Availability" id="1" class="see-avail">
-            </form>
+            <!-- when clicked redirected to reservation of seats page -->
+                         <a href="/reservation/A" class="see-avail-link">
+                 <button type="button" class="see-avail">See Availability</button>
+             </a>
         </div> 
 
         <!-- container for lab b -->
@@ -120,9 +120,9 @@
                 capacity: 18 seats <br>
                 location: 3rd floor
             </div>
-            <form action="/reservation/B" method="post">
-                <input type="submit" value="See Availability" id="2" class="see-avail">
-            </form>
+                         <a href="/reservation/B" class="see-avail-link">
+                 <button type="button" class="see-avail">See Availability</button>
+             </a>
         </div>
 
         <!-- container for lab c -->
@@ -133,16 +133,15 @@
                 capacity: 18 seats <br>
                 location: 4th floor
             </div>
-            <form action="/reservation/C" method="post">
-                <input type="submit" value="See Availability" id="3" class="see-avail">
-            </form>
+                         <a href="/reservation/C" class="see-avail-link">
+                 <button type="button" class="see-avail">See Availability</button>
+             </a>
         </div>
 
     </div>
 </div>
 
-<script>
-</script>
+<!-- JavaScript handlers removed - now using proper links -->
  
 </body>
 </html>
