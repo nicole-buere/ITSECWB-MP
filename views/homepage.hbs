@@ -88,9 +88,43 @@
 
 <div class="content-block">
 
-    <div class="greeting">
-        <h2> Hello, {{username}} </h2>
-    </div>
+<div class="greeting">
+  <h2>Hello, {{username}}</h2>
+  <div class="last-login">
+    Last login:
+    {{#if lastLoginAt}}
+      <time id="lastLogin" datetime="{{lastLoginAt}}"></time>
+    {{else}}—{{/if}}
+  </div>
+</div>
+
+<style>
+  .greeting h2 { margin: 0; }
+  .last-login { margin-top: 4px; font-size: 0.95rem; opacity: 0.8; }
+</style>
+
+<script>
+  (function () {
+    const el = document.getElementById('lastLogin');
+    if (!el) return; // no lastLoginAt
+    const iso = el.getAttribute('datetime');
+    const d = new Date(iso);
+    if (isNaN(d)) { el.textContent = iso; return; }
+
+    const datePart = new Intl.DateTimeFormat(undefined, {
+      weekday: 'short', month: 'short', day: 'numeric', year: 'numeric'
+    }).format(d);
+
+    const timePart = new Intl.DateTimeFormat(undefined, {
+      hour: 'numeric', minute: '2-digit'
+    }).format(d);
+
+    el.textContent = `${datePart} • ${timePart}`;
+    el.title = d.toString(); // tooltip with full string
+  })();
+</script>
+
+
 
     <div class = "instruction">
         <h3>Please select a computer lab</h3>

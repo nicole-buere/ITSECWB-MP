@@ -108,7 +108,13 @@ app.get('/register', (req, res) => {
 // Update your /home route handler
 app.get('/home', (req, res) => {
     if (req.session.authenticated) {
-        res.render('homepage', { title: 'Labyrinth - Home Page', username: req.session.username });
+        res.render('homepage', {
+  title: 'Labyrinth - Home Page',
+  username: req.session.username,
+  isStudent: req.session.user?.role === 'student',
+  lastLoginAt: req.session.user?.lastLoginAt || null,
+});
+
     } else {
         res.status(401).render('error_page', {
             title: 'Unauthorized Access',
