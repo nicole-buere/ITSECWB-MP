@@ -45,4 +45,16 @@ router.get('/kba/question-by-token',
   userController.getKbaQuestionForToken
 );
 
+// Admin routes
+router.get('/admin/dashboard', checkRole(['admin']), userController.getAdminDashboard);
+router.get('/admin/users', checkRole(['admin']), userController.getAllUsers);
+router.get('/admin/logs/validation', checkRole(['admin']), userController.getValidationLogs);
+router.get('/admin/logs/login', checkRole(['admin']), userController.getLoginLogs);
+router.get('/admin/logs/kba', checkRole(['admin']), userController.getKbaLogs);
+router.get('/admin/logs/activity', checkRole(['admin']), userController.getActivityLogs);
+
+// User management routes
+router.put('/admin/users/:userId', checkRole(['admin']), userController.updateUser);
+router.delete('/admin/users/:userId', checkRole(['admin']), userController.deleteUser);
+
 module.exports = router;

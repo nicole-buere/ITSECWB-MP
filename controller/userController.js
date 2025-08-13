@@ -1075,3 +1075,233 @@ exports.logoutUser = async (req, res) => {
     }
 }
 
+// Admin Dashboard
+exports.getAdminDashboard = async (req, res) => {
+    try {
+        const user = req.session?.user;
+        if (!user || user.role !== 'admin') {
+            return res.status(403).json({ message: 'Access denied: Admin role required' });
+        }
+
+        // Get basic stats
+        const { count: userCount, error: userError } = await supabase
+            .from('users')
+            .select('*', { count: 'exact', head: true });
+
+        if (userError) {
+            console.error("Error getting user count:", userError);
+        }
+
+        const { count: logCount, error: logError } = await supabase
+            .from('input_validationfail_logs')
+            .select('*', { count: 'exact', head: true });
+
+        if (logError) {
+            console.error("Error getting log count:", logError);
+        }
+
+        res.render('admin_dashboard', {
+            user: user,
+            stats: {
+                userCount: userCount || 0,
+                logCount: logCount || 0
+            }
+        });
+    } catch (e) {
+        console.error("Error in getAdminDashboard:", e);
+        res.status(500).json({ message: e.message });
+    }
+};
+
+// Get all users for admin
+exports.getAllUsers = async (req, res) => {
+    try {
+        const user = req.session?.user;
+        if (!user || user.role !== 'admin') {
+            return res.status(403).json({ message: 'Access denied: Admin role required' });
+        }
+
+        const { data: users, error } = await supabase
+            .from('users')
+            .select('id, name, email, username, role, description, profilePicture, created_at')
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error("Error fetching users:", error);
+            return res.status(500).json({ message: "Error fetching users" });
+        }
+
+        res.json(users);
+    } catch (e) {
+        console.error("Error in getAllUsers:", e);
+        res.status(500).json({ message: e.message });
+    }
+};
+
+// Get system logs for admin
+exports.getSystemLogs = async (req, res) => {
+    try {
+        const user = req.session?.user;
+        if (!user || user.role !== 'admin') {
+            return res.status(403).json({ message: 'Access denied: Admin role required' });
+        }
+
+        const { data: logs, error } = await supabase
+            .from('input_validationfail_logs')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(100); // Limit to last 100 logs
+
+        if (error) {
+            console.error("Error fetching logs:", error);
+            return res.status(500).json({ message: "Error fetching logs" });
+        }
+
+        res.json(logs);
+    } catch (e) {
+        console.error("Error in getSystemLogs:", e);
+        res.status(500).json({ message: e.message });
+    }
+};
+
+// Get validation failure logs for admin dashboard
+exports.getValidationLogs = async (req, res) => {
+    try {
+        const { data: logs, error } = await supabase
+            .from('input_validationfail_logs')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(100);
+
+        if (error) {
+            console.error("Error getting validation logs:", error);
+            return res.status(500).json({ message: "Error retrieving validation logs" });
+        }
+
+        res.json(logs || []);
+    } catch (e) {
+        console.error("Error in getValidationLogs:", e);
+        res.status(500).json({ message: e.message });
+    }
+};
+
+// Get login attempt logs for admin dashboard
+exports.getLoginLogs = async (req, res) => {
+    try {
+        const { data: logs, error } = await supabase
+            .from('login_attempts_logs')
+            .select('*')
+            .order('attemptedAt', { ascending: false })
+            .limit(100);
+
+        if (error) {
+            console.error("Error getting login logs:", error);
+            return res.status(500).json({ message: "Error retrieving login logs" });
+        }
+
+        res.json(logs || []);
+    } catch (e) {
+        console.error("Error in getLoginLogs:", e);
+        res.status(500).json({ message: e.message });
+    }
+};
+
+// Get KBA attempt logs for admin dashboard
+exports.getKbaLogs = async (req, res) => {
+    try {
+        const { data: logs, error } = await supabase
+            .from('kba_attempts')
+            .select('*')
+            .order('attempted_at', { ascending: false })
+            .limit(100);
+
+        if (error) {
+            console.error("Error getting KBA logs:", error);
+            return res.status(500).json({ message: "Error retrieving KBA logs" });
+        }
+
+        res.json(logs || []);
+    } catch (e) {
+        console.error("Error in getKbaLogs:", e);
+        res.status(500).json({ message: e.message });
+    }
+};
+
+// Get activity logs for admin dashboard
+exports.getActivityLogs = async (req, res) => {
+    try {
+        const { data: logs, error } = await supabase
+            .from('activity_logs')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(100);
+
+        if (error) {
+            console.error("Error getting activity logs:", error);
+            return res.status(500).json({ message: "Error retrieving activity logs" });
+        }
+
+        res.json(logs || []);
+    } catch (e) {
+        console.error("Error in getActivityLogs:", e);
+        res.status(500).json({ message: e.message });
+    }
+};
+
+// Update user for admin
+exports.updateUser = async (req, res) => {
+    try {
+        const user = req.session?.user;
+        if (!user || user.role !== 'admin') {
+            return res.status(403).json({ message: 'Access denied: Admin role required' });
+        }
+
+        const { userId } = req.params;
+        const { name, email, role, description } = req.body;
+
+        const { data, error } = await supabase
+            .from('users')
+            .update({ name, email, role, description })
+            .eq('id', userId)
+            .select()
+            .single();
+
+        if (error) {
+            console.error("Error updating user:", error);
+            return res.status(500).json({ message: "Error updating user" });
+        }
+
+        res.json({ message: "User updated successfully", user: data });
+    } catch (e) {
+        console.error("Error in updateUser:", e);
+        res.status(500).json({ message: e.message });
+    }
+};
+
+// Delete user for admin
+exports.deleteUser = async (req, res) => {
+    try {
+        const user = req.session?.user;
+        if (!user || user.role !== 'admin') {
+            return res.status(403).json({ message: 'Access denied: Admin role required' });
+        }
+
+        const { userId } = req.params;
+
+        const { error } = await supabase
+            .from('users')
+            .delete()
+            .eq('id', userId);
+
+        if (error) {
+            console.error("Error deleting user:", error);
+            return res.status(500).json({ message: "Error deleting user" });
+        }
+
+        res.json({ message: "User deleted successfully" });
+    } catch (e) {
+        console.error("Error in deleteUser:", e);
+        res.status(500).json({ message: e.message });
+    }
+};
+

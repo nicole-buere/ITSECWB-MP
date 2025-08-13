@@ -17,8 +17,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (response.ok) {
             const data = await response.json();
-            console.log(data);
-            window.location.href = '/home'
+            console.log('Login response data:', data);
+            console.log('User role:', data.user?.role);
+            
+            // Redirect based on user role
+            if (data.user && data.user.role === 'admin') {
+                console.log('Redirecting admin to dashboard');
+                window.location.href = '/admin/dashboard';
+            } else {
+                console.log('Redirecting non-admin to home');
+                window.location.href = '/home';
+            }
             // window.location.href = `/profile?username=${username}`;
         } else {
             const errData = await response.json();
