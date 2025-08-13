@@ -392,6 +392,7 @@ exports.resetPassword = async (req, res) => {
       await supabase.from('user_password_history').delete().in('id', extraIds);
     }
 
+    await logActivity(user.id, 'Reset password via email link', req.ip);
     return res.status(200).json({ message: 'Password has been reset.' });
   } catch (e) {
     console.error('resetPassword error:', e);
@@ -399,6 +400,19 @@ exports.resetPassword = async (req, res) => {
   }
 };
 
+// Simple activity logger (non-blocking)
+async function logActivity(userId, activity, ip) {
+  try {
+    if (!userId) return; // safety
+    const text = ip ? `${activity} (ip: ${ip})` : activity;
+    const { error } = await supabase
+      .from('activity_logs')
+      .insert([{ activity: text, activity_done_by: userId }]);
+    if (error) console.warn('activity_logs insert error:', error);
+  } catch (e) {
+    console.warn('activity_logs unexpected error:', e);
+  }
+}
 
 
 
@@ -581,7 +595,7 @@ exports.changePassword = async (req, res) => {
       const extraIds = allRows.slice(PASSWORD_HISTORY_LIMIT).map(r => r.id);
       await supabase.from('user_password_history').delete().in('id', extraIds);
     }
-
+    await logActivity(user.id, 'Changed password', req.ip);
     return res.status(200).json({ message: 'Password changed successfully' });
   } catch (e) {
     console.error('changePassword error:', e);
