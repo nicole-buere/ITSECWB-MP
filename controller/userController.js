@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const APP_BASE_URL = process.env.APP_BASE_URL || ''; // optional override for links
 
 
+const { hashAnswer, verifyAnswer } = require('../utils/kba');
 
 const PASSWORD_HISTORY_LIMIT = 3; // block reuse of the last N passwords
 const BCRYPT_ROUNDS = 12;
@@ -31,6 +32,169 @@ function hashToken(token) {
                .update(token)
                .digest('hex');
 }
+
+// GET /api/users/kba/questions
+exports.listKbaQuestions = async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('security_questions')
+      .select('id, prompt, min_answer_len')
+      .order('id', { ascending: true });
+
+    if (error) throw error;
+
+    // Fallback pool if table is empty
+    const fallback = [
+      { id: 101, prompt: 'What is a nickname only one family member used for you?', min_answer_len: 12 },
+      { id: 102, prompt: 'What non-obvious object was in your bedroom growing up?', min_answer_len: 10 },
+      { id: 103, prompt: 'Exact name of a place you regularly visited as a child (not school/home)?', min_answer_len: 12 },
+      { id: 104, prompt: 'A line from a lullaby/poem a family member used to say (write it exactly).', min_answer_len: 16 },
+      { id: 105, prompt: 'Make and color of a bicycle/toy you used the most?', min_answer_len: 10 },
+      { id: 106, prompt: 'What unusual snack or combo did you love as a kid?', min_answer_len: 10 },
+      { id: 107, prompt: 'Title of a book you owned (not school/library) in elementary school?', min_answer_len: 10 },
+      { id: 108, prompt: 'Color/pattern of a blanket you used in childhood?', min_answer_len: 10 },
+      { id: 109, prompt: 'A family saying or phrase you remember (exact wording).', min_answer_len: 16 },
+    ];
+
+    return res.json((data && data.length) ? data : fallback);
+  } catch (e) {
+    console.error('listKbaQuestions error:', e);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+// GET /api/users/kba/me   -> returns whether user already enrolled
+// GET /api/users/kba/me
+exports.getMyKbaStatus = async (req, res) => {
+  try {
+    const userId = req.session?.user?.id;
+    if (!userId) return res.status(401).json({ message: 'Not authenticated' });
+
+    const { data, count, error } = await supabase
+      .from('user_security_answers')
+      .select('question_id', { count: 'exact' })
+      .eq('user_id', userId);
+
+    if (error) throw error;
+
+    const total = typeof count === 'number' ? count : (data?.length || 0);
+    return res.json({ enrolled: total >= 2, count: total });
+  } catch (e) {
+    console.error('getMyKbaStatus error:', e);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+
+// POST /api/users/kba/enroll
+// Body: { answers: [{question_id, answer}, ...] }  // or { passphrase }
+// POST /api/users/kba/enroll
+exports.enrollKba = async (req, res) => {
+  try {
+    const userId = req.session?.user?.id;
+    if (!userId) return res.status(401).json({ message: 'Not authenticated' });
+
+    const { answers, passphrase } = req.body || {};
+
+    // Option A: recovery passphrase
+    if (passphrase) {
+      if (passphrase.trim().length < 20) {
+        return res.status(400).json({ message: 'Passphrase must be at least 20 characters.' });
+      }
+      const hash = await hashAnswer(passphrase);
+      await supabase
+        .from('user_security_answers')
+        .upsert([{ user_id: userId, question_id: -1, answer_hash: hash }], { onConflict: 'user_id,question_id' });
+      return res.status(200).json({ message: 'Recovery passphrase saved.' });
+    }
+
+    // Option B: 3 questions
+    if (!Array.isArray(answers) || answers.length !== 3) {
+      return res.status(400).json({ message: 'Please provide answers to exactly 3 questions.' });
+    }
+
+    // IDs must be unique
+    const ids = answers.map(a => +a?.question_id || 0);
+    if (ids.some(id => !id) || new Set(ids).size !== 3) {
+      return res.status(400).json({ message: 'Choose 3 different valid questions.' });
+    }
+
+    // Pull min lengths from DB (fallback to 10 if not found)
+    const { data: qs, error: qErr } = await supabase
+      .from('security_questions')
+      .select('id, min_answer_len')
+      .in('id', ids);
+    if (qErr) throw qErr;
+
+    const minMap = Object.fromEntries((qs || []).map(q => [q.id, q.min_answer_len || 10]));
+    for (let i = 0; i < answers.length; i++) {
+      const a = (answers[i].answer || '').trim();
+      const min = minMap[ids[i]] ?? 10;
+      if (a.length < min) {
+        return res.status(400).json({ message: `Answer ${i + 1} must be at least ${min} characters.` });
+      }
+    }
+
+    // Hash & save
+    const rows = [];
+    for (let i = 0; i < answers.length; i++) {
+      const hash = await hashAnswer(answers[i].answer);
+      rows.push({ user_id: userId, question_id: ids[i], answer_hash: hash });
+    }
+
+    // Replace prior answers
+    await supabase.from('user_security_answers').delete().eq('user_id', userId);
+    const { error } = await supabase.from('user_security_answers').insert(rows);
+    if (error) throw error;
+
+    return res.status(200).json({ message: 'Security answers saved.' });
+  } catch (e) {
+    console.error('enrollKba error:', e);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+exports.getKbaQuestionForToken = async (req, res) => {
+  try {
+    const { token } = req.query || {};
+    if (!token) return res.status(400).json({ message: 'Missing token' });
+
+    const tokenHash = crypto.createHmac('sha256', RESET_TOKEN_PEPPER).update(token).digest('hex');
+
+    const { data: rows } = await supabase
+      .from('password_reset_tokens')
+      .select('user_id, expires_at, consumed_at')
+      .eq('token_hash', tokenHash)
+      .limit(1);
+
+    if (!rows || !rows.length) return res.status(404).json({ message: 'Invalid token' });
+    const row = rows[0];
+    if (row.consumed_at || new Date(row.expires_at).getTime() < Date.now()) {
+      return res.status(404).json({ message: 'Invalid token' });
+    }
+
+    // Does this user have any KBA?
+    const { data: kba } = await supabase
+      .from('user_security_answers')
+      .select('question_id')
+      .eq('user_id', row.user_id);
+
+    if (!kba || !kba.length) return res.status(204).end(); // no KBA set
+
+    // Pick one at random and return the prompt
+    const picked = kba[Math.floor(Math.random() * kba.length)];
+    const { data: q } = await supabase
+      .from('security_questions')
+      .select('prompt')
+      .eq('id', picked.question_id)
+      .single();
+
+    return res.json({ question_id: picked.question_id, prompt: q?.prompt || 'Answer your security question.' });
+  } catch (e) {
+    console.error('getKbaQuestionForToken error:', e);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
 // POST /api/users/forgot-password
 exports.requestPasswordReset = async (req, res) => {
   try {
@@ -101,9 +265,10 @@ exports.requestPasswordReset = async (req, res) => {
 };
 
 // POST /api/users/reset-password
+// POST /api/users/reset-password
 exports.resetPassword = async (req, res) => {
   try {
-    const { token, newPassword } = req.body || {};
+    const { token, newPassword, kbaAnswer, question_id } = req.body || {};
     if (!token || !newPassword) {
       return res.status(400).json({ message: 'Missing fields' });
     }
@@ -160,21 +325,40 @@ exports.resetPassword = async (req, res) => {
     if (histReadErr) {
       return res.status(500).json({ message: 'Could not read password history.' });
     }
-
     for (const h of history || []) {
       if (await bcrypt.compare(newPassword, h.hash)) {
         return res.status(400).json({ message: 'Password was used recently. Pick a different one.' });
       }
     }
 
-    // Hash new password
+    // --- KBA CHECK (if the user has KBA enrolled) ---
+    const { data: kbaList } = await supabase
+      .from('user_security_answers')
+      .select('question_id, answer_hash')
+      .eq('user_id', user.id);
+
+    if (kbaList && kbaList.length > 0) {
+      if (!kbaAnswer || !question_id) {
+        return res.status(400).json({ message: 'Security answer required.' });
+      }
+      const entry = (kbaList || []).find(x => x.question_id === Number(question_id));
+      if (!entry) {
+        return res.status(400).json({ message: 'Security question mismatch.' });
+      }
+      const ok = await verifyAnswer(kbaAnswer, entry.answer_hash);
+      if (!ok) {
+        return res.status(401).json({ message: 'Security check failed.' });
+      }
+    }
+    // -------------------------------------------------
+
+    // Hash new password AFTER all checks pass
     const newHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
 
     // Rotate history: store old hash
     const { error: histInsErr } = await supabase
       .from('user_password_history')
       .insert([{ user_id: user.id, username: user.username, hash: user.password }]);
-
     if (histInsErr) {
       return res.status(500).json({ message: 'Could not update password history.' });
     }
@@ -208,12 +392,27 @@ exports.resetPassword = async (req, res) => {
       await supabase.from('user_password_history').delete().in('id', extraIds);
     }
 
+    await logActivity(user.id, 'Reset password via email link', req.ip);
     return res.status(200).json({ message: 'Password has been reset.' });
   } catch (e) {
     console.error('resetPassword error:', e);
     return res.status(500).json({ message: 'Internal server error' });
   }
 };
+
+// Simple activity logger (non-blocking)
+async function logActivity(userId, activity, ip) {
+  try {
+    if (!userId) return; // safety
+    const text = ip ? `${activity} (ip: ${ip})` : activity;
+    const { error } = await supabase
+      .from('activity_logs')
+      .insert([{ activity: text, activity_done_by: userId }]);
+    if (error) console.warn('activity_logs insert error:', error);
+  } catch (e) {
+    console.warn('activity_logs unexpected error:', e);
+  }
+}
 
 
 
@@ -396,7 +595,7 @@ exports.changePassword = async (req, res) => {
       const extraIds = allRows.slice(PASSWORD_HISTORY_LIMIT).map(r => r.id);
       await supabase.from('user_password_history').delete().in('id', extraIds);
     }
-
+    await logActivity(user.id, 'Changed password', req.ip);
     return res.status(200).json({ message: 'Password changed successfully' });
   } catch (e) {
     console.error('changePassword error:', e);
