@@ -60,6 +60,19 @@ async function testSupabaseConnection() {
             console.error("Error accessing lab_seats table:", seatsError);
         }
         
+        // Test if the input_validationfail_logs table exists
+        const { data: logsTest, error: logsError } = await supabase
+            .from('input_validationfail_logs')
+            .select('count')
+            .limit(1);
+            
+        if (logsError) {
+            console.error("Error accessing input_validationfail_logs table:", logsError);
+            console.error("This table might not exist or have different permissions");
+        } else {
+            console.log("Successfully accessed input_validationfail_logs table");
+        }
+        
         return true;
     } catch (err) {
         console.error("Error connecting to Supabase:", err);

@@ -1,4 +1,99 @@
- 
+/**
+ * Validates the "reserve for" field for lab tech reservations
+ * @param {string} name - The name to validate
+ * @returns {Object} - Validation result with isValid boolean and message
+ */
+function validateReserveForName(name) {
+    // Check if name is empty or only whitespace
+    if (!name || name.trim() === '') {
+        return {
+            isValid: false,
+            message: 'Name cannot be empty or contain only spaces'
+        };
+    }
+
+    // Check if name is too long (over 50 characters)
+    if (name.length > 50) {
+        return {
+            isValid: false,
+            message: 'Name cannot exceed 50 characters'
+        };
+    }
+
+    // Check if name contains only spaces
+    if (name.trim().length === 0) {
+        return {
+            isValid: false,
+            message: 'Name cannot contain only spaces'
+        };
+    }
+
+    // Regular expression for valid names:
+    // - Letters (a-z, A-Z) with optional spaces
+    // - Apostrophes and hyphens are allowed
+    // - No numbers or special characters
+    const nameRegex = /^[a-zA-Z\s'-]+$/;
+
+    if (!nameRegex.test(name)) {
+        return {
+            isValid: false,
+            message: 'Name can only contain letters, spaces, apostrophes, and hyphens'
+        };
+    }
+
+    // Check if name contains only valid characters but is too short
+    if (name.trim().length < 2) {
+        return {
+            isValid: false,
+            message: 'Name must be at least 2 characters long'
+        };
+    }
+
+    // Check for consecutive special characters (e.g., --, '', etc.)
+    if (/(['-])\1/.test(name)) {
+        return {
+            isValid: false,
+            message: 'Name cannot contain consecutive apostrophes or hyphens'
+        };
+    }
+
+    // Check if name starts or ends with special characters
+    if (/^['-]|['-]$/.test(name.trim())) {
+        return {
+            isValid: false,
+            message: 'Name cannot start or end with apostrophes or hyphens'
+        };
+    }
+
+    return {
+        isValid: true,
+        message: 'Name is valid'
+    };
+}
+
+/**
+ * Provides real-time validation feedback for the reserve for input field
+ * @param {HTMLInputElement} inputField - The input field to validate
+ */
+function validateReserveForField(inputField) {
+    const value = inputField.value;
+    const validationResult = validateReserveForName(value);
+    
+    // Remove existing validation classes
+    inputField.classList.remove('valid', 'invalid');
+    
+    if (value === '') {
+        // Field is empty, no validation feedback needed
+        return;
+    }
+    
+    if (validationResult.isValid) {
+        inputField.classList.add('valid');
+    } else {
+        inputField.classList.add('invalid');
+    }
+}
+
 function getSelectedSeat() {
     // Get all radio button elements with the name "selected_seat"
     const seatRadios = document.querySelectorAll('input[name="selected_seat"]:checked');
@@ -348,7 +443,10 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Add event listener for admin reserve for field
     if (reserveForInput) {
-        reserveForInput.addEventListener('input', updateButtonStates);
+        reserveForInput.addEventListener('input', (e) => {
+            updateButtonStates();
+            validateReserveForField(e.target);
+        });
     }
     
     // Initialize button states
@@ -441,6 +539,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert('All fields must be filled. Please enter a username for the reservation.');
                 return;
             }
+
+            // Note: Client-side validation removed to allow server-side validation and logging
+            // The server will validate and log any validation failures
             
             const requestBody = {
                 date,
