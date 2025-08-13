@@ -1,6 +1,61 @@
 const { supabase } = require('../model/database');
 const bcrypt = require("bcrypt");
 
+/// Helper function for logging both succesful and failed logins
+async function logLoginAttempt(username, ip, success) {
+    try {
+        const attemptedAt = new Date();
+
+        if (success) {
+            // Reset attemptNum on success
+            await supabase
+                .from('login_attempts_logs')
+                // Shortcut instead of doing SELECT and INSERT
+                .upsert({
+                    username,
+                    attemptNum: 0,
+                    ip_address: ip,
+                    attemptedAt,
+                    status: true
+                }, { onConflict: ['username'] });
+        } else {
+            // Check if exists
+            const { data, error: fetchError } = await supabase
+                .from('login_attempts_logs')
+                .select('attemptNum')
+                .eq('username', username)
+                .single();
+
+            if (fetchError) {
+                // Insert account if it doesn't exist
+                await supabase
+                    .from('login_attempts_logs')
+                    .insert([{
+                        username,
+                        attemptNum: 1,
+                        ip_address: ip,
+                        attemptedAt,
+                        status: false
+                    }]);
+            } else {
+                // Increment by 1 if it exists
+                await supabase
+                    .from('login_attempts_logs')
+                    .update({
+                        attemptNum: (data?.attemptNum || 0) + 1,
+                        ip_address: ip,
+                        attemptedAt,
+                        status: false
+                    })
+                    .eq('username', username);
+            }
+        }
+    } catch (err) {
+        console.error("Unexpected error in logLoginAttempt:", err);
+    }
+}
+
+
 
 exports.registerUser = async (req, res) => {
     try {
@@ -63,6 +118,7 @@ exports.registerUser = async (req, res) => {
 exports.loginUser = async (req, res) => {
     try {
         const { username, password } = req.body;
+        const ipAddress = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
 
         // Find user in Supabase
         const { data: user, error: findError } = await supabase
@@ -73,12 +129,14 @@ exports.loginUser = async (req, res) => {
 
         if (findError) {
             console.error("Error finding user:", findError);
-            return res.status(401).json({ message: "User not found!" });
+            await logLoginAttempt(username, ipAddress, false);
+            return res.status(401).json({ message: "Invalid credentials!" });
         }
 
         if (!user) {
-            return res.status(401).json({ message: "User not found!" });
-        }
+            await logLoginAttempt(username, ipAddress, false);
+            return res.status(401).json({ message: "Invalid credentials!" });
+        } 
 
         // Debugging 
         console.log ("Inputted Password: ", password)
@@ -92,11 +150,14 @@ exports.loginUser = async (req, res) => {
             req.session.authenticated = true;
             req.session.username = username;
 
+            await logLoginAttempt(username, ipAddress, true);
+
             if (user.role === 'admin') {
                 req.session.admin = true;
             }
             return res.status(200).json(req.session);
         } else {
+            await logLoginAttempt(username, ipAddress, false);
             return res.status(401).json({ message: "Invalid credentials!" });
         }
     } catch (e) {
