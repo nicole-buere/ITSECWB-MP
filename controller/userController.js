@@ -1,6 +1,7 @@
 const { supabase } = require('../model/database');
 const bcrypt = require("bcrypt");
 const crypto = require('crypto');
+const { logValidationFailure } = require('../utils/validation');
 const APP_BASE_URL = process.env.APP_BASE_URL || ''; // optional override for links
 
 
@@ -423,36 +424,214 @@ exports.registerUser = async (req, res) => {
             return res.status(500).json({ message: "Database error" });
         }
 
+        // Check if email is valid (should be @dlsu.edu.ph ending ONLY)
+        if (email.slice(-12) !== "@dlsu.edu.ph") {
+            // Log validation failure for invalid email
+            try {
+                console.log('Logging registration validation failure for invalid email:', email);
+                const logResult = await logValidationFailure(
+                    supabase,
+                    null, // No user ID since this is a new registration
+                    username,
+                    'registration_email',
+                    email,
+                    'Email is not a valid DLSU email address'
+                );
+                
+                if (logResult.success) {
+                    console.log('✅ Registration email validation failure logged successfully');
+                } else {
+                    console.log('❌ Failed to log registration email validation failure:', logResult.error);
+                }
+            } catch (loggingError) {
+                console.error('Exception during registration email validation failure logging:', loggingError);
+            }
+            
+            res.status(400).json({ message: "Email is not a valid DLSU email address!" });
+            return;
+        }
+
         if (existingUser) {
+            // Log validation failure for duplicate username
+            try {
+                console.log('Logging registration validation failure for duplicate username:', username);
+                const logResult = await logValidationFailure(
+                    supabase,
+                    null, // No user ID since this is a new registration
+                    username,
+                    'registration_username',
+                    username,
+                    'Username is already taken'
+                );
+                
+                if (logResult.success) {
+                    console.log('✅ Registration validation failure logged successfully');
+                } else {
+                    console.log('❌ Failed to log registration validation failure:', logResult.error);
+                }
+            } catch (loggingError) {
+                console.error('Exception during registration validation failure logging:', loggingError);
+            }
+            
             res.status(400).json({ message: "Username is already taken!" });
             return;
         }
 
         // Check if password meets minimum length (8)
         if (password.length < 8) {
+            // Log validation failure for password too short
+            try {
+                console.log('Logging registration validation failure for password too short');
+                const logResult = await logValidationFailure(
+                    supabase,
+                    null, // No user ID since this is a new registration
+                    username,
+                    'registration_password',
+                    '[PASSWORD_HIDDEN]',
+                    'Password must be at least 8 characters'
+                );
+                
+                if (logResult.success) {
+                    console.log('✅ Registration password validation failure logged successfully');
+                } else {
+                    console.log('❌ Failed to log registration password validation failure:', logResult.error);
+                }
+            } catch (loggingError) {
+                console.error('Exception during registration password validation failure logging:', loggingError);
+            }
+            
             res.status(400).json({ message: "Password must be at least 8 characters!" });
             return;
         }
 
         // Checks if password meets character requirements
         if (!/[A-Z]/.test(password)) {
+            // Log validation failure for missing uppercase
+            try {
+                console.log('Logging registration validation failure for missing uppercase in password');
+                const logResult = await logValidationFailure(
+                    supabase,
+                    null, // No user ID since this is a new registration
+                    username,
+                    'registration_password',
+                    '[PASSWORD_HIDDEN]',
+                    'Password must have at least 1 uppercase character'
+                );
+                
+                if (logResult.success) {
+                    console.log('✅ Registration password complexity validation failure logged successfully');
+                } else {
+                    console.log('❌ Failed to log registration password complexity validation failure:', logResult.error);
+                }
+            } catch (loggingError) {
+                console.error('Exception during registration password complexity validation failure logging:', loggingError);
+            }
+            
             res.status(400).json({ message: "Password must have at least 1 uppercase character!" });
+            return;
         }
 
         if (!/[a-z]/.test(password)) {
+            // Log validation failure for missing lowercase
+            try {
+                console.log('Logging registration validation failure for missing lowercase in password');
+                const logResult = await logValidationFailure(
+                    supabase,
+                    null, // No user ID since this is a new registration
+                    username,
+                    'registration_password',
+                    '[PASSWORD_HIDDEN]',
+                    'Password must have at least 1 lowercase character'
+                );
+                
+                if (logResult.success) {
+                    console.log('✅ Registration password complexity validation failure logged successfully');
+                } else {
+                    console.log('❌ Failed to log registration password complexity validation failure:', logResult.error);
+                }
+            } catch (loggingError) {
+                console.error('Exception during registration password complexity validation failure logging:', loggingError);
+            }
+            
             res.status(400).json({ message: "Password must have at least 1 lowercase character" });
+            return;
         }
 
         if (!/\d/.test(password)) {
+            // Log validation failure for missing numeric character
+            try {
+                console.log('Logging registration validation failure for missing numeric character in password');
+                const logResult = await logValidationFailure(
+                    supabase,
+                    null, // No user ID since this is a new registration
+                    username,
+                    'registration_password',
+                    '[PASSWORD_HIDDEN]',
+                    'Password must have at least 1 numerical character'
+                );
+                
+                if (logResult.success) {
+                    console.log('✅ Registration password complexity validation failure logged successfully');
+                } else {
+                    console.log('❌ Failed to log registration password complexity validation failure:', logResult.error);
+                }
+            } catch (loggingError) {
+                console.error('Exception during registration password complexity validation failure logging:', loggingError);
+            }
+            
             res.status(400).json({ message: "Password must have at least 1 numerical character!" });
+            return;
         }
 
         if (!/[@#$%^&+=]/.test(password)) {
+            // Log validation failure for missing special character
+            try {
+                console.log('Logging registration validation failure for missing special character in password');
+                const logResult = await logValidationFailure(
+                    supabase,
+                    null, // No user ID since this is a new registration
+                    username,
+                    'registration_password',
+                    '[PASSWORD_HIDDEN]',
+                    'Password must have at least 1 special character'
+                );
+                
+                if (logResult.success) {
+                    console.log('✅ Registration password complexity validation failure logged successfully');
+                } else {
+                    console.log('❌ Failed to log registration password complexity validation failure:', logResult.error);
+                }
+            } catch (loggingError) {
+                console.error('Exception during registration password complexity validation failure logging:', loggingError);
+            }
+            
             res.status(400).json({ message: "Password must have at least 1 special character!" });
+            return;
         }
 
         // Checks if 'Password' and 'Confirm Password' fields match
         if (password !== confirmPassword) {
+            // Log validation failure for password mismatch
+            try {
+                console.log('Logging registration validation failure for password mismatch');
+                const logResult = await logValidationFailure(
+                    supabase,
+                    null, // No user ID since this is a new registration
+                    username,
+                    'registration_password_confirm',
+                    '[PASSWORD_HIDDEN]',
+                    'Passwords do not match'
+                );
+                
+                if (logResult.success) {
+                    console.log('✅ Registration password mismatch validation failure logged successfully');
+                } else {
+                    console.log('❌ Failed to log registration password mismatch validation failure:', logResult.error);
+                }
+            } catch (loggingError) {
+                console.error('Exception during registration password mismatch validation failure logging:', loggingError);
+            }
+            
             res.status(400).json({ message: "Passwords do not match!" });
             return;
         }
@@ -504,6 +683,28 @@ exports.loginUser = async (req, res) => {
         if (findError || !user) {
             console.error("Error finding user:", findError);
             await logLoginAttempt(username, ipAddress, false);
+            
+            // Log validation failure for invalid username
+            try {
+                console.log('Logging login validation failure for invalid username:', username);
+                const logResult = await logValidationFailure(
+                    supabase,
+                    null, // No user ID since user doesn't exist
+                    username,
+                    'login_username',
+                    username,
+                    'Invalid username - user not found'
+                );
+                
+                if (logResult.success) {
+                    console.log('✅ Login validation failure logged successfully');
+                } else {
+                    console.log('❌ Failed to log login validation failure:', logResult.error);
+                }
+            } catch (loggingError) {
+                console.error('Exception during login validation failure logging:', loggingError);
+            }
+            
             return res.status(401).json({ message: "Invalid credentials!" });
         }
 
@@ -542,6 +743,28 @@ exports.loginUser = async (req, res) => {
             return res.status(200).json(req.session);
         } else {
             await logLoginAttempt(username, ipAddress, false);
+            
+            // Log validation failure for invalid password
+            try {
+                console.log('Logging login validation failure for invalid password for user:', username);
+                const logResult = await logValidationFailure(
+                    supabase,
+                    user.id, // We have the user ID since user exists
+                    username,
+                    'login_password',
+                    '[PASSWORD_HIDDEN]', // Don't log actual password
+                    'Invalid password - password does not match'
+                );
+                
+                if (logResult.success) {
+                    console.log('✅ Login password validation failure logged successfully');
+                } else {
+                    console.log('❌ Failed to log login password validation failure:', logResult.error);
+                }
+            } catch (loggingError) {
+                console.error('Exception during login password validation failure logging:', loggingError);
+            }
+            
             return res.status(401).json({ message: "Invalid Username/Password" });
         }
     } catch (e) {
