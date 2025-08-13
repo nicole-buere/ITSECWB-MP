@@ -84,11 +84,11 @@ exports.loginUser = async (req, res) => {
 
         if (findError) {
             console.error("Error finding user:", findError);
-            return res.status(401).json({ message: "User not found!" });
+            return res.status(401).json({ message: "Invalid Username/Password" });
         }
 
         if (!user) {
-            return res.status(401).json({ message: "User not found!" });
+            return res.status(401).json({ message: "Invalid Username/Password" });
         }
 
         // Debugging 
@@ -108,7 +108,7 @@ exports.loginUser = async (req, res) => {
             }
             return res.status(200).json(req.session);
         } else {
-            return res.status(401).json({ message: "Invalid credentials!" });
+            return res.status(401).json({ message: "Invalid Username/Password" });
         }
     } catch (e) {
         console.error(e);
