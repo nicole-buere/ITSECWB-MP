@@ -1,7 +1,28 @@
-// Checks if password meets min length (8) & if 'Password' and 'Confirm Password' fields match
+// Checks if password meets requirements & if 'Password' and 'Confirm Password' fields match
 function validatePassword(password, confirmPassword) {
+    const hasUpper = /[A-Z]/.test(password);
+    const hasLower = /[a-z]/.test(password);
+    const hasNumber = /\d/.test(password);
+    const hasSpecial = /[@#$%^&+=]/.test(password);
+
     if (password.length < 8) {
         alert("Password must be at least 8 characters!");
+        return false;
+    }
+    if (!hasUpper) {
+        alert("Password must have at least 1 uppercase character!");
+        return false;
+    }
+    if (!hasLower) {
+        alert("Password must have at least 1 lowercase character!");
+        return false;
+    }
+    if (!hasNumber) {
+        alert("Password must have at least 1 numerical character!");
+        return false;
+    }
+    if (!hasSpecial) {
+        alert("Password must have at least 1 special character!");
         return false;
     }
     if (password !== confirmPassword) {
