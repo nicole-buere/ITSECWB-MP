@@ -1,8 +1,221 @@
 const { supabase } = require('../model/database');
 const bcrypt = require("bcrypt");
+const crypto = require('crypto');
+const APP_BASE_URL = process.env.APP_BASE_URL || ''; // optional override for links
+
+
+
+const PASSWORD_HISTORY_LIMIT = 3; // block reuse of the last N passwords
+const BCRYPT_ROUNDS = 12;
+const MS_24H = 24 * 60 * 60 * 1000; // 24h in ms
 
 const MAX_FAILED_BEFORE_LOCK = 5; // Threshold before exponential lockout
 const BASE_LOCK_SECONDS = 2;      // Base seconds for exponential backoff
+
+const RESET_TOKEN_TTL_MIN = 15; // Token validity in minutes
+const RESET_TOKEN_PEPPER = process.env.RESET_TOKEN_PEPPER || 'change-me-in-prod'; 
+const COMPLEXITY = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@#$%^&+=]).{8,}$/;
+
+const nodemailer = require('nodemailer');
+const { sendMail } = require('../utils/mailer');
+const mailer = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: Number(process.env.SMTP_PORT || 587),
+  secure: Number(process.env.SMTP_PORT) === 465, // true for 465
+  auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+});
+
+
+function hashToken(token) {
+  return crypto.createHmac('sha256', RESET_TOKEN_PEPPER)
+               .update(token)
+               .digest('hex');
+}
+// POST /api/users/forgot-password
+exports.requestPasswordReset = async (req, res) => {
+  try {
+    const { emailOrUsername } = req.body || {};
+    if (!emailOrUsername) {
+      return res.status(400).json({ message: 'Missing field' });
+    }
+
+    // Find by email OR username (do NOT leak whether user exists)
+    const { data: user } = await supabase
+      .from('users')
+      .select('id, email, username') // include username for email body
+      .or(`email.eq.${emailOrUsername},username.eq.${emailOrUsername}`)
+      .single();
+
+    // Always respond 200 (avoid enumeration)
+    if (!user) {
+      return res.status(200).json({ message: 'If an account exists, a reset link has been sent.' });
+    }
+
+    // Revoke any older unconsumed tokens for this user
+    await supabase
+      .from('password_reset_tokens')
+      .delete()
+      .eq('user_id', user.id)
+      .is('consumed_at', null);
+
+    // Create a new single-use token
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = hashToken(rawToken); // uses your helper/pepper
+    const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MIN * 60 * 1000).toISOString();
+
+    const { error: insErr } = await supabase
+      .from('password_reset_tokens')
+      .insert([{ user_id: user.id, token_hash: tokenHash, expires_at: expiresAt }]);
+
+    if (insErr) {
+      console.error('reset token insert error:', insErr);
+      return res.status(500).json({ message: 'Could not start reset.' });
+    }
+
+    // Build link & send email
+    const base = APP_BASE_URL || `${req.protocol}://${req.get('host')}`;
+    const resetLink = `${base}/reset-password?token=${rawToken}`;
+
+    try {
+    await sendMail({
+    to: user.email,
+    subject: 'Reset your Labyrinth password',
+    html: `
+        <p>Hello ${user.username || ''},</p>
+        <p>Click below to reset your password (valid ${RESET_TOKEN_TTL_MIN} minutes):</p>
+        <p><a href="${resetLink}">Reset Password</a></p>
+        <p style="font-size:12px;color:#666">Or copy: ${resetLink}</p>
+    `,
+    });
+
+    } catch (e) {
+      console.error('Email send failed:', e);
+      // Still return generic success to avoid user enumeration
+    }
+
+    return res.status(200).json({ message: 'If an account exists, a reset link has been sent.' });
+  } catch (e) {
+    console.error('requestPasswordReset error:', e);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+// POST /api/users/reset-password
+exports.resetPassword = async (req, res) => {
+  try {
+    const { token, newPassword } = req.body || {};
+    if (!token || !newPassword) {
+      return res.status(400).json({ message: 'Missing fields' });
+    }
+
+    // Enforce password complexity (same regex as register/change)
+    if (!COMPLEXITY.test(newPassword)) {
+      return res.status(400).json({
+        message: 'Password must be ≥8 chars and include uppercase, lowercase, a number, and a symbol (@#$%^&+=).'
+      });
+    }
+
+    // Look up token
+    const tokenHash = hashToken(token);
+    const { data: tokens, error: findTokErr } = await supabase
+      .from('password_reset_tokens')
+      .select('id, user_id, expires_at, consumed_at')
+      .eq('token_hash', tokenHash)
+      .is('consumed_at', null)
+      .limit(1);
+
+    if (findTokErr || !tokens || tokens.length === 0) {
+      return res.status(400).json({ message: 'Invalid or used token.' });
+    }
+
+    const tok = tokens[0];
+    if (new Date(tok.expires_at).getTime() < Date.now()) {
+      return res.status(400).json({ message: 'Token expired.' });
+    }
+
+    // Load user and current hash/timestamps
+    const { data: user, error: userErr } = await supabase
+      .from('users')
+      .select('id, username, password, password_changed_at, created_at')
+      .eq('id', tok.user_id)
+      .single();
+
+    if (userErr || !user) {
+      return res.status(400).json({ message: 'Invalid token.' });
+    }
+
+    // Prevent reuse: current hash
+    if (await bcrypt.compare(newPassword, user.password)) {
+      return res.status(400).json({ message: 'New password must differ from current.' });
+    }
+
+    // Prevent reuse: last N hashes
+    const { data: history, error: histReadErr } = await supabase
+      .from('user_password_history')
+      .select('hash')
+      .eq('user_id', user.id)
+      .order('changed_at', { ascending: false })
+      .limit(PASSWORD_HISTORY_LIMIT);
+
+    if (histReadErr) {
+      return res.status(500).json({ message: 'Could not read password history.' });
+    }
+
+    for (const h of history || []) {
+      if (await bcrypt.compare(newPassword, h.hash)) {
+        return res.status(400).json({ message: 'Password was used recently. Pick a different one.' });
+      }
+    }
+
+    // Hash new password
+    const newHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+
+    // Rotate history: store old hash
+    const { error: histInsErr } = await supabase
+      .from('user_password_history')
+      .insert([{ user_id: user.id, username: user.username, hash: user.password }]);
+
+    if (histInsErr) {
+      return res.status(500).json({ message: 'Could not update password history.' });
+    }
+
+    // Update password + timestamp
+    const { error: updErr } = await supabase
+      .from('users')
+      .update({ password: newHash, password_changed_at: new Date().toISOString() })
+      .eq('id', user.id);
+
+    if (updErr) {
+      return res.status(500).json({ message: 'Could not update password.' });
+    }
+
+    // Consume this and any other open tokens for the user (so only one reset works)
+    await supabase
+      .from('password_reset_tokens')
+      .update({ consumed_at: new Date().toISOString() })
+      .eq('user_id', user.id)
+      .is('consumed_at', null);
+
+    // Trim history beyond N
+    const { data: allRows } = await supabase
+      .from('user_password_history')
+      .select('id')
+      .eq('user_id', user.id)
+      .order('changed_at', { ascending: false });
+
+    if (allRows && allRows.length > PASSWORD_HISTORY_LIMIT) {
+      const extraIds = allRows.slice(PASSWORD_HISTORY_LIMIT).map(r => r.id);
+      await supabase.from('user_password_history').delete().in('id', extraIds);
+    }
+
+    return res.status(200).json({ message: 'Password has been reset.' });
+  } catch (e) {
+    console.error('resetPassword error:', e);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+
 
 /// Helper function for logging logins and lockout mechanism
 // Lockout mechanism is based on Amazon Cognito's exponential lockouts
@@ -91,10 +304,6 @@ async function logLoginAttempt(username, ip, success) {
         console.error("Unexpected error in logLoginAttempt:", err);
     }
 }
-
-const PASSWORD_HISTORY_LIMIT = 3; // block reuse of the last N passwords
-const BCRYPT_ROUNDS = 12;
-const MS_24H = 24 * 60 * 60 * 1000; // 24h in ms
 
 exports.changePassword = async (req, res) => {
   try {
@@ -386,7 +595,7 @@ exports.editPFP = async (req, res) => {
     try {
         const { error } = await supabase
             .from('users')
-            .update({ pictureURL: req.body.pictureURL })
+            .update({ profilePicture: req.body.pictureURL })
             .eq('username', req.session.username);
 
         if (error) {

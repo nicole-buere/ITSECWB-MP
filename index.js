@@ -1,3 +1,8 @@
+require('dotenv').config();
+console.log('[env] cwd:', process.cwd());
+console.log('[env] RESEND_API_KEY present?', Boolean(process.env.RESEND_API_KEY));
+console.log('[env] MAIL_FROM:', process.env.MAIL_FROM);
+
 const express = require('express');
 const path = require('path');
 const bodyParser = require('body-parser');
@@ -10,6 +15,8 @@ const cors = require('cors');
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+
 //fixing css
 app.use(express.static('public'));
 
@@ -339,6 +346,21 @@ app.get('/viewprofile', async (req, res) => {
     }
 });
 
+// Reset password page (public)
+app.get('/reset-password', (req, res) => {
+  const { token } = req.query;
+  if (!token) {
+    return res.status(400).render('error_page', {
+      title: 'Bad Request',
+      errorCode: '400',
+      errorTitle: 'Missing token',
+      errorMessage: 'The reset link is missing a token.',
+      errorDescription: 'Please use the link from your email, or request a new one.',
+      showLogin: true
+    });
+  }
+  res.render('reset_password', { title: 'Reset Password', token });
+});
 
 
 // Handle GET request to the /reserve route
