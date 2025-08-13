@@ -6,6 +6,7 @@ exports.registerUser = async (req, res) => {
     try {
         const { name, email, username, password, confirmPassword, role } = req.body;
 
+        // Debugging
         console.log("password ", password);
         console.log("confirmPassword", confirmPassword);
 
@@ -26,6 +27,18 @@ exports.registerUser = async (req, res) => {
             return;
         }
 
+        // Check if password meets minimum length (8)
+        if (password.length !== 8) {
+            res.status(400).json({ message: "Password must be at least 8 characters!" });
+            return;
+        }
+
+        // Check if 'Password' and 'Confirm Password' fields match
+        if (password !== confirmPassword) {
+            res.status(400).json({ message: "Passwords do not match!" });
+            return;
+        }
+
         // Hash the password before storing it in the database
         const saltRounds = 10;
         const hash = await bcrypt.hash(password, saltRounds);
@@ -39,7 +52,6 @@ exports.registerUser = async (req, res) => {
             role: role || 'student',
             description: '',
             profilePicture: 'https://www.redditstatic.com/avatars/avatar_default_02_4856A3.png',
-            reservations: [],
         };
 
         // Save the new user to the database
@@ -78,6 +90,10 @@ exports.loginUser = async (req, res) => {
         if (!user) {
             return res.status(401).json({ message: "User not found!" });
         }
+
+        // Debugging 
+        console.log ("Inputted Password: ", password)
+        console.log ("Stored Password: ", user.password)
 
         const isPasswordValid = await bcrypt.compare(password, user.password);
 

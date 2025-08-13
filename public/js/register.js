@@ -1,3 +1,15 @@
+// Checks if password meets min length (8) & if 'Password' and 'Confirm Password' fields match
+function validatePassword(password, confirmPassword) {
+    if (password.length < 8) {
+        alert("Password must be at least 8 characters!");
+        return false;
+    }
+    if (password !== confirmPassword) {
+        alert("Passwords do not match!");
+        return false;
+    }
+    return true;
+}
 
 document.addEventListener('DOMContentLoaded', () => {
     const register = document.getElementById('register-form');
@@ -12,11 +24,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const confPass = document.getElementById('confPassword').value; 
         const role = document.getElementById('role').value;
 
-        // Check if the password and confirm password fields match
-        if (password !== confPass) {
-            alert("Passwords do not match!");
-            return;
-        }
+        // Calls password input validation function
+        if (!validatePassword(password, confPass)) return;
 
         // Check if email is valid it should be @dlsu.edu.ph ending ONLY
         if (email.slice(-12) !== "@dlsu.edu.ph") {
