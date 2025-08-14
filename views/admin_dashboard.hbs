@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Labyrinth</title>
+    <link rel="stylesheet" href="/css/admin-dashboard.css">
+</head>
+<body>
+    <main class="main-content">
+        <div class="dashboard-header">
+            <h1>Hello, {{user.username}}</h1>
+            <p class="subtitle">System Logs</p>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Total Users</h3>
+                <p class="stat-number">{{stats.userCount}}</p>
+            </div>
+            <div class="stat-card">
+                <h3>System Logs</h3>
+                <p class="stat-number">{{stats.logCount}}</p>
+            </div>
+        </div>
+
+        <div class="admin-actions">
+            <div class="action-card">
+                <h3>User Management</h3>
+                <p>View and manage all system users</p>
+                <button onclick="viewUsers()" class="btn-primary">View Users</button>
+            </div>
+            
+            <div class="action-card">
+                <h3>System Logs</h3>
+                <p>Monitor system activity and validation failures</p>
+                <button onclick="viewLogs()" class="btn-primary">View Logs</button>
+            </div>
+        </div>
+
+        <div id="users-section" class="section hidden">
+            <h2>All Users</h2>
+            <div class="table-container">
+                <table id="users-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Username</th>
+                            <th>Email</th>
+                            <th>Role</th>
+                            <th>Description</th>
+                            <th>Created</th>
+                        </tr>
+                    </thead>
+                    <tbody id="users-tbody">
+                        <!-- Users will be populated here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="logs-section" class="section hidden">
+            <h2>System Logs</h2>
+            <div class="table-container">
+                <table id="logs-table">
+                    <thead>
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>Type</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logs-tbody">
+                        <!-- Logs will be populated here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <script src="/js/admin-dashboard.js"></script>
+</body>
+</html>

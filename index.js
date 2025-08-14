@@ -88,6 +88,8 @@ hbs.registerHelper('and', function() {
     return Array.prototype.slice.call(arguments, 0, -1).every(Boolean);
 });
 
+// Register partials (sidebar_admin removed as it's no longer used)
+
 // Handle GET request to the root route (index page)
 app.get('/', (req, res) => {
   if (req.session.authenticated) {
@@ -130,6 +132,67 @@ app.get('/home', (req, res) => {
 });
 
 
+// Handle GET request to the admin dashboard route
+app.get('/admin/dashboard', async (req, res) => {
+    if (!req.session.authenticated) {
+        return res.status(401).render('error_page', {
+            title: 'Unauthorized Access',
+            errorCode: '401',
+            errorTitle: 'Unauthorized Access',
+            errorMessage: 'You need to log in to access this page.',
+            errorDescription: 'This page requires authentication. Please log in with your account credentials.',
+            showLogin: true
+        });
+    }
+
+    if (!req.session.user || req.session.user.role !== 'admin') {
+        return res.status(403).render('error_page', {
+            title: 'Access Denied',
+            errorCode: '403',
+            errorTitle: 'Access Denied',
+            errorMessage: 'You do not have permission to access the admin dashboard.',
+            errorDescription: 'This page is restricted to administrators only.',
+            showLogin: false
+        });
+    }
+
+    try {
+        // Get basic stats
+        const { count: userCount, error: userError } = await supabase
+            .from('users')
+            .select('*', { count: 'exact', head: true });
+
+        if (userError) {
+            console.error("Error getting user count:", userError);
+        }
+
+        const { count: logCount, error: logError } = await supabase
+            .from('input_validationfail_logs')
+            .select('*', { count: 'exact', head: true });
+
+        if (logError) {
+            console.error("Error getting log count:", logError);
+        }
+
+        res.render('admin_dashboard', {
+            user: req.session.user,
+            stats: {
+                userCount: userCount || 0,
+                logCount: logCount || 0
+            }
+        });
+    } catch (e) {
+        console.error("Error in admin dashboard:", e);
+        res.status(500).render('error_page', {
+            title: 'Internal Server Error',
+            errorCode: '500',
+            errorTitle: 'Internal Server Error',
+            errorMessage: 'Something went wrong while loading the admin dashboard.',
+            errorDescription: 'We encountered an issue while retrieving dashboard information. Please try again later.',
+            showLogin: false
+        });
+    }
+});
 
 // Handle GET request to the /profile route
 //for viewing to b editted pa hehe
